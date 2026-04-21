@@ -1,0 +1,365 @@
+import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StatusBadge } from '@/components/StatusBadges';
+import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Asset } from '@/types';
+
+type IntangibleFormState = {
+  name: string;
+  category: string;
+  status: 'Available' | 'Assigned';
+  assignerLocation: string;
+  employeeName: string;
+  employeeContactNumber: string;
+  employmentType: 'Permanent' | 'Contract';
+  subscriptionType: string;
+  validityStartDate: string;
+  validityEndDate: string;
+  renewalDate: string;
+  amountPaid: string;
+};
+
+const emptyForm = (): IntangibleFormState => ({
+  name: '',
+  category: 'Software License',
+  status: 'Available',
+  assignerLocation: '',
+  employeeName: '',
+  employeeContactNumber: '',
+  employmentType: 'Permanent',
+  subscriptionType: '',
+  validityStartDate: '',
+  validityEndDate: '',
+  renewalDate: '',
+  amountPaid: '',
+});
+
+export default function IntangibleAssetManagement() {
+  const { user } = useAuth();
+  const { assets, addAsset, updateAsset, deleteAsset, isLoading } = useData();
+  const { toast } = useToast();
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Available' | 'Assigned'>('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState<IntangibleFormState>(emptyForm());
+
+  const intangibleAssets = assets.filter((asset) => asset.type === 'Intangible');
+
+  const filteredAssets = intangibleAssets.filter((asset) => {
+    const matchesSearch =
+      asset.name.toLowerCase().includes(search.toLowerCase()) ||
+      (asset.subscriptionType || '').toLowerCase().includes(search.toLowerCase()) ||
+      (asset.employeeName || asset.assignedTo || '').toLowerCase().includes(search.toLowerCase()) ||
+      (asset.assignerLocation || '').toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm());
+    setDialogOpen(true);
+  };
+
+  const openEdit = (asset: Asset) => {
+    setEditingId(asset.id);
+    setForm({
+      name: asset.name || '',
+      category: asset.category || 'Software License',
+      status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
+      assignerLocation: asset.assignerLocation || '',
+      employeeName: asset.employeeName || asset.assignedTo || '',
+      employeeContactNumber: asset.employeeContactNumber || '',
+      employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
+      subscriptionType: asset.subscriptionType || '',
+      validityStartDate: asset.validityStartDate || asset.purchaseDate || '',
+      validityEndDate: asset.validityEndDate || asset.warrantyPeriod || '',
+      renewalDate: asset.renewalDate || '',
+      amountPaid: asset.amountPaid != null ? String(asset.amountPaid) : '',
+    });
+    setDialogOpen(true);
+  };
+
+  const resetAndClose = () => {
+    setDialogOpen(false);
+    setEditingId(null);
+    setForm(emptyForm());
+  };
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.subscriptionType || !form.validityStartDate || !form.validityEndDate) {
+      toast({
+        title: 'Missing fields',
+        description: 'Please enter asset name, subscription type, start date, and expiry date.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        name: form.name,
+        type: 'Intangible' as const,
+        category: form.category,
+        purchaseDate: form.validityStartDate,
+        warrantyPeriod: form.validityEndDate,
+        status: form.status,
+        approvalStatus: 'Approved' as const,
+        assignedTo: form.status === 'Assigned' && form.employeeName ? form.employeeName : undefined,
+        createdBy: user?.id || 'higher_management',
+        assignerLocation: form.assignerLocation,
+        employeeName: form.employeeName,
+        employeeContactNumber: form.employeeContactNumber,
+        employmentType: form.employmentType,
+        subscriptionType: form.subscriptionType,
+        validityStartDate: form.validityStartDate,
+        validityEndDate: form.validityEndDate,
+        renewalDate: form.renewalDate,
+        amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
+        vendor: '',
+        licenseKey: '',
+      };
+
+      if (editingId) {
+        await updateAsset(editingId, payload);
+        toast({ title: 'Intangible asset updated' });
+      } else {
+        await addAsset(payload);
+        toast({ title: 'Intangible asset added' });
+      }
+      resetAndClose();
+    } catch (error) {
+      toast({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Unable to save intangible asset.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    deleteAsset(id);
+    toast({ title: 'Intangible asset removed' });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="mr-2 h-6 w-6 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Loading intangible assets...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Intangible Asset Management</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage software licenses, subscriptions, and other digital assets.
+          </p>
+        </div>
+        <Button onClick={openAdd} className="w-full lg:w-auto">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Intangible Asset
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <CardTitle className="text-lg">Intangible Assets</CardTitle>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="relative w-full md:w-80">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, subscription, employee, or location"
+                  className="h-11 pl-10"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'Available' | 'Assigned')}>
+                <SelectTrigger className="h-11 w-full md:w-48">
+                  <SelectValue placeholder="Filter status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Available">Available</SelectItem>
+                  <SelectItem value="Assigned">Assigned</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-xl border bg-white">
+            <table className="min-w-[1300px] w-full text-sm">
+              <thead className="bg-[#0b2a59] text-white">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">Asset</th>
+                  <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold">Assigner Location</th>
+                  <th className="px-4 py-3 text-left font-semibold">Employee Name</th>
+                  <th className="px-4 py-3 text-left font-semibold">Contact No.</th>
+                  <th className="px-4 py-3 text-left font-semibold">Employment Type</th>
+                  <th className="px-4 py-3 text-left font-semibold">Subscription Type</th>
+                  <th className="px-4 py-3 text-left font-semibold">Start Date</th>
+                  <th className="px-4 py-3 text-left font-semibold">Expiry Date</th>
+                  <th className="px-4 py-3 text-left font-semibold">Renewal Date</th>
+                  <th className="px-4 py-3 text-left font-semibold">Amount Paid</th>
+                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAssets.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      No intangible assets found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAssets.map((asset) => (
+                    <tr key={asset.id} className="border-t">
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="font-medium text-slate-900">{asset.name}</p>
+                          <p className="text-xs text-muted-foreground">{asset.id}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <StatusBadge status={asset.status} />
+                      </td>
+                      <td className="px-4 py-4">{asset.assignerLocation || '—'}</td>
+                      <td className="px-4 py-4">{asset.employeeName || asset.assignedTo || '—'}</td>
+                      <td className="px-4 py-4">{asset.employeeContactNumber || '—'}</td>
+                      <td className="px-4 py-4">{asset.employmentType || '—'}</td>
+                      <td className="px-4 py-4">{asset.subscriptionType || '—'}</td>
+                      <td className="px-4 py-4">{asset.validityStartDate || asset.purchaseDate || '—'}</td>
+                      <td className="px-4 py-4">{asset.validityEndDate || asset.warrantyPeriod || '—'}</td>
+                      <td className="px-4 py-4">{asset.renewalDate || '—'}</td>
+                      <td className="px-4 py-4">{asset.amountPaid != null ? asset.amountPaid : '—'}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => openEdit(asset)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" variant="destructive" size="sm" onClick={() => handleDelete(asset.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{editingId ? 'Edit Intangible Asset' : 'Add Intangible Asset'}</DialogTitle>
+            <DialogDescription>
+              Fill in the digital asset details required for intangible asset management.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Input value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Asset Status</Label>
+              <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as 'Available' | 'Assigned' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Available">Available</SelectItem>
+                  <SelectItem value="Assigned">Assigned</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Assigner Location</Label>
+              <Input value={form.assignerLocation} onChange={(e) => setForm((prev) => ({ ...prev, assignerLocation: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Employee Name</Label>
+              <Input value={form.employeeName} onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Employee Contact Number</Label>
+              <Input value={form.employeeContactNumber} onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Employment Type</Label>
+              <Select value={form.employmentType} onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Permanent">Permanent</SelectItem>
+                  <SelectItem value="Contract">Contract</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Subscription Type</Label>
+              <Input value={form.subscriptionType} onChange={(e) => setForm((prev) => ({ ...prev, subscriptionType: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Input type="date" value={form.validityStartDate} onChange={(e) => setForm((prev) => ({ ...prev, validityStartDate: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Expiry Date</Label>
+              <Input type="date" value={form.validityEndDate} onChange={(e) => setForm((prev) => ({ ...prev, validityEndDate: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Renewal Date</Label>
+              <Input type="date" value={form.renewalDate} onChange={(e) => setForm((prev) => ({ ...prev, renewalDate: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Amount Paid</Label>
+              <Input
+                type="number"
+                min="0"
+                value={form.amountPaid}
+                onChange={(e) => setForm((prev) => ({ ...prev, amountPaid: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetAndClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {editingId ? 'Update Asset' : 'Save Asset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
