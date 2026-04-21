@@ -34,6 +34,7 @@ export interface Asset {
   condition?: string;
   amount?: number;
   employeeName?: string;
+  employeeLocation?: string;
   location?: string;
   laptopModelNumber?: string;
   laptopSpecifications?: string;
