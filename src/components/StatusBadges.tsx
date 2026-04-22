@@ -6,6 +6,8 @@ export function StatusBadge({ status }: { status: AssetStatus }) {
   const variants: Record<string, string> = {
     'AVAILABLE': 'bg-success/15 text-success border-success/30',
     'ASSIGNED': 'bg-primary/15 text-primary border-primary/30',
+    'REPAIR': 'bg-warning/15 text-warning border-warning/30',
+    'REPLACEMENT': 'bg-violet-100 text-violet-800 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800',
     'UNDER REPAIR': 'bg-warning/15 text-warning border-warning/30',
     'RETIRED': 'bg-destructive/15 text-destructive border-destructive/30',
     'DISPOSAL': 'bg-red-500 text-white border-red-600 max-w-fit font-semibold',

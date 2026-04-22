@@ -35,7 +35,7 @@ export default function AppLayout() {
               )}
             </div>
           </header>
-          <main className="min-h-0 flex-1 overflow-auto bg-[#e6eef5] pt-16">
+          <main className="min-h-0 flex-1 overflow-hidden bg-[#e6eef5] pt-16">
             <div className="mx-auto w-full max-w-[1400px] px-8 py-6">
               <Outlet />
             </div>

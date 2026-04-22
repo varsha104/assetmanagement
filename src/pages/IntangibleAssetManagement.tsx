@@ -2,17 +2,24 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/StatusBadges';
-import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Loader2, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Asset } from '@/types';
 
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
+const INTANGIBLE_CATEGORIES = ['Software License', 'Cloud Subscription'] as const;
 
 function normalizeAssignerLocation(value?: string) {
   return ASSIGNER_LOCATIONS.includes(value as (typeof ASSIGNER_LOCATIONS)[number]) ? value || '' : '';
@@ -21,6 +28,7 @@ function normalizeAssignerLocation(value?: string) {
 type IntangibleFormState = {
   name: string;
   category: string;
+  customCategory: string;
   status: 'Available' | 'Assigned';
   assignerLocation: string;
   employeeName: string;
@@ -36,7 +44,8 @@ type IntangibleFormState = {
 
 const emptyForm = (): IntangibleFormState => ({
   name: '',
-  category: 'Software License',
+  category: '',
+  customCategory: '',
   status: 'Available',
   assignerLocation: '',
   employeeName: '',
@@ -81,10 +90,15 @@ export default function IntangibleAssetManagement() {
   };
 
   const openEdit = (asset: Asset) => {
+    const category = asset.category || 'Software License';
+    const normalizedCategory = INTANGIBLE_CATEGORIES.includes(category as (typeof INTANGIBLE_CATEGORIES)[number])
+      ? category
+      : 'Other';
     setEditingId(asset.id);
     setForm({
       name: asset.name || '',
-      category: asset.category || 'Software License',
+      category: normalizedCategory,
+      customCategory: normalizedCategory === 'Other' ? category : '',
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
         assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
         employeeName: asset.employeeName || asset.assignedTo || '',
@@ -107,10 +121,11 @@ export default function IntangibleAssetManagement() {
   };
 
   const handleSubmit = async () => {
-    if (!form.name || !form.subscriptionType || !form.validityStartDate || !form.validityEndDate) {
+    const resolvedCategory = form.category === 'Other' ? form.customCategory.trim() : form.category;
+    if (!form.name || !resolvedCategory || !form.subscriptionType || !form.validityStartDate || !form.validityEndDate) {
       toast({
         title: 'Missing fields',
-        description: 'Please enter asset name, subscription type, start date, and expiry date.',
+        description: 'Please enter asset name, category, subscription type, start date, and expiry date.',
         variant: 'destructive',
       });
       return;
@@ -121,7 +136,7 @@ export default function IntangibleAssetManagement() {
       const payload = {
         name: form.name,
         type: 'Intangible' as const,
-        category: form.category,
+        category: resolvedCategory,
         purchaseDate: form.validityStartDate,
         warrantyPeriod: form.validityEndDate,
         status: form.status,
@@ -180,64 +195,60 @@ export default function IntangibleAssetManagement() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Intangible Asset Management</h1>
-          <p className="text-sm text-muted-foreground">
+          {/* <p className="text-sm text-muted-foreground">
             Manage software licenses, subscriptions, and other digital assets.
-          </p>
+          </p> */}
         </div>
-        <Button onClick={openAdd} className="w-full lg:w-auto">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Intangible Asset
-        </Button>
       </div>
 
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <CardTitle className="text-lg">Intangible Assets</CardTitle>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <div className="relative w-full md:w-80">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, subscription, employee, or location"
-                  className="h-11 pl-10"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'Available' | 'Assigned')}>
-                <SelectTrigger className="h-11 w-full md:w-48">
-                  <SelectValue placeholder="Filter status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Available">Available</SelectItem>
-                  <SelectItem value="Assigned">Assigned</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-xl border bg-white">
-            <table className="min-w-[1600px] w-full text-sm">
-              <thead className="bg-[#0b2a59] text-white">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Assigner Name</th>
-                  <th className="px-4 py-3 text-left font-semibold">Category</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Assigner Location</th>
-                  <th className="px-4 py-3 text-left font-semibold">Employee Name</th>
-                  <th className="px-4 py-3 text-left font-semibold">Contact No.</th>
-                  <th className="px-4 py-3 text-left font-semibold">Employment Type</th>
-                  <th className="px-4 py-3 text-left font-semibold">Employee Location</th>
-                  <th className="px-4 py-3 text-left font-semibold">Subscription Type</th>
-                  <th className="px-4 py-3 text-left font-semibold">Start Date</th>
-                  <th className="px-4 py-3 text-left font-semibold">Expiry Date</th>
-                  <th className="px-4 py-3 text-left font-semibold">Renewal Date</th>
-                  <th className="px-4 py-3 text-left font-semibold">Amount Paid</th>
-                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
-                </tr>
-              </thead>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="relative w-full md:w-100">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, subscription, employee, or location"
+            className="h-11 pl-10"
+          />
+        </div>
+        <div className="flex w-full gap-2 md:w-auto">
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'Available' | 'Assigned')}>
+            <SelectTrigger className="h-11 w-full md:w-48">
+              <SelectValue placeholder="Filter status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="Available">Available</SelectItem>
+              <SelectItem value="Assigned">Assigned</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={openAdd} className="w-full md:w-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Intangible Asset
+          </Button>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-xl border bg-white">
+        <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
+          <table className="min-w-[1600px] w-full text-sm">
+            <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
+              <tr>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Status</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Location</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Name</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Contact No</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Employment Type</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Location</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Subscription Type</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Start Date</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Expiry Date</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Renewal Date</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Amount Paid</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-right font-semibold">Actions</th>
+              </tr>
+            </thead>
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
@@ -269,13 +280,34 @@ export default function IntangibleAssetManagement() {
                       <td className="px-4 py-4">{asset.renewalDate || '—'}</td>
                       <td className="px-4 py-4">{asset.amountPaid != null ? asset.amountPaid : '—'}</td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => openEdit(asset)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="destructive" size="sm" onClick={() => handleDelete(asset.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <div className="flex items-center justify-end">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 hover:bg-transparent focus-visible:ring-0"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                                <span className="sr-only">More options</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={() => openEdit(asset)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDelete(asset.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
@@ -284,8 +316,7 @@ export default function IntangibleAssetManagement() {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
@@ -303,7 +334,38 @@ export default function IntangibleAssetManagement() {
             </div>
             <div className="space-y-2">
               <Label>Category</Label>
-              <Input value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} />
+              <Select
+                value={form.category}
+                onValueChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    category: value,
+                    customCategory: value === 'Other' ? prev.customCategory : '',
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTANGIBLE_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              {form.category === 'Other' ? (
+                <div className="pt-2">
+                  <Label className="sr-only">Custom Category</Label>
+                  <Input
+                    value={form.customCategory}
+                    onChange={(e) => setForm((prev) => ({ ...prev, customCategory: e.target.value }))}
+                    placeholder="Enter custom category"
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Asset Status</Label>

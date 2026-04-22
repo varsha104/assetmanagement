@@ -289,6 +289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         laptop_model_number: asset.laptopModelNumber || '',
         laptop_specifications: asset.laptopSpecifications || '',
         vendor_name: asset.vendorName || asset.vendor || '',
+        amount: asset.amount || 0,
         location: asset.location || '',
       });
       if (result.ok) {
@@ -372,6 +373,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         laptop_model_number: updates.laptopModelNumber,
         laptop_specifications: updates.laptopSpecifications,
         vendor_name: updates.vendorName || updates.vendor,
+        amount: updates.amount || 0,
         location: updates.location,
       };
 

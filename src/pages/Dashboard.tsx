@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useData } from '@/contexts/DataContext';
 import { StatusBadge } from '@/components/StatusBadges';
-import { Package, Building2, CheckCircle, Clock, AlertTriangle, Loader2, Wrench, CircleAlert } from 'lucide-react';
+import { Package, Building2, CheckCircle, Clock, Loader2, Wrench, CircleAlert } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Asset } from '@/types';
 
@@ -15,6 +15,9 @@ const DEAD_STATUS_KEYS = new Set([
   'DEAD',
   'DAMAGED',
   'FAILED',
+  'UNDER_REPAIR',
+  'REPAIR',
+  'REPLACEMENT',
   'BROKEN',
   'RETIRED',
   'OBSOLETE',
@@ -152,7 +155,7 @@ export default function Dashboard() {
   const assetListDescription = assetListMeta[assetListFilter].description;
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col gap-6 overflow-y-auto pr-1 pb-6 scrollbar-hide">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -292,37 +295,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Dead Assets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {deadAssets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No dead assets recorded.</p>
-          ) : (
-            <div className="space-y-3">
-              {deadAssets.map((asset) => (
-                <div key={asset.id} className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="font-medium text-sm">{asset.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {asset.type} · {asset.category} · {asset.id}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-start gap-2 md:items-end">
-                    <StatusBadge status={asset.status} />
-                    <div className="flex items-start gap-2 text-sm text-slate-700">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-                      <span className="max-w-[520px] text-right">{getDeadReason(asset)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
     </div>
   );
