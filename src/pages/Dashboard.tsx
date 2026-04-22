@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useData } from '@/contexts/DataContext';
-import { IssueBadge, StatusBadge } from '@/components/StatusBadges';
+import { StatusBadge } from '@/components/StatusBadges';
 import { Package, Building2, CheckCircle, Clock, AlertTriangle, Loader2, Wrench, CircleAlert } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Asset } from '@/types';
@@ -46,7 +46,7 @@ function getDeadReason(asset: Asset) {
 }
 
 export default function Dashboard() {
-  const { assets, issues, approvals, getUserById, isLoading } = useData();
+  const { assets, isLoading } = useData();
   const [assetListOpen, setAssetListOpen] = useState(false);
   const [assetListFilter, setAssetListFilter] = useState<AssetListFilter>('all');
 
@@ -153,7 +153,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Higher Management Dashboard</h1>
+      <h1 className="text-2xl font-bold">Dashboard</h1>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {summaryCards.map((card) => (
@@ -193,21 +193,20 @@ export default function Dashboard() {
       </div>
 
       <Dialog open={assetListOpen} onOpenChange={setAssetListOpen}>
-        <DialogContent className="flex h-[85vh] max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl">
+        <DialogContent className="flex h-[85vh] max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl">
           <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-4">
             <DialogTitle className="text-xl font-semibold text-slate-900">{assetListTitle}</DialogTitle>
             <DialogDescription className="text-sm text-slate-600">{assetListDescription}</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="min-h-0 flex-1 bg-white px-6 pb-5 pt-0">
-            <Table className="table-fixed w-[1280px]">
+          <ScrollArea type="always" className="min-h-0 flex-1 bg-white px-6 pb-5 pt-0">
+              <Table className="table-fixed w-full">
               <colgroup>
-                <col className="w-[24%]" />
+                <col className="w-[28%]" />
                 <col className="w-[12%]" />
                 <col className="w-[16%]" />
-                <col className="w-[14%]" />
-                <col className="w-[14%]" />
-                <col className="w-[10%]" />
-                <col className="w-[10%]" />
+                <col className="w-[12%]" />
+                <col className="w-[16%]" />
+                <col className="w-[16%]" />
               </colgroup>
               <TableHeader className="sticky top-0 z-20">
                 <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
@@ -216,8 +215,9 @@ export default function Dashboard() {
                   <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Ownership</TableHead>
                   <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
                   <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Assigned To</TableHead>
-                  <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Category</TableHead>
-                  <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Reason</TableHead>
+                  <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">
+                    {assetListFilter === 'dead' ? 'Reason' : 'Category'}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -235,12 +235,13 @@ export default function Dashboard() {
                     </TableCell>
                     <TableCell><StatusBadge status={asset.status} /></TableCell>
                     <TableCell className="truncate">{asset.assignedTo || '—'}</TableCell>
-                    <TableCell className="truncate">{asset.category || '—'}</TableCell>
-                    <TableCell className="truncate">{assetListFilter === 'dead' ? getDeadReason(asset) : '—'}</TableCell>
+                    <TableCell className="truncate">
+                      {assetListFilter === 'dead' ? getDeadReason(asset) : asset.category || '—'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
           </ScrollArea>
         </DialogContent>
       </Dialog>
@@ -323,30 +324,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Recent Issues</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {issues.slice(0, 5).map((issue) => {
-              const asset = assets.find((assetItem) => assetItem.id === issue.assetId);
-              const raiser = getUserById(issue.raisedBy);
-              return (
-                <div key={issue.id} className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
-                  <div>
-                    <p className="text-sm font-medium">{issue.description}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {asset?.name} · Raised by {raiser?.name} · {issue.createdAt}
-                    </p>
-                  </div>
-                  <IssueBadge status={issue.status} />
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

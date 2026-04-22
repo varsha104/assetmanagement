@@ -13,6 +13,17 @@ import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Asset } from '@/types';
 
+const TANGIBLE_CATEGORIES = ['Laptop', 'Desktop', 'Mouse', 'Headset'] as const;
+const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
+
+function normalizeTangibleCategory(value?: string) {
+  return TANGIBLE_CATEGORIES.includes(value as (typeof TANGIBLE_CATEGORIES)[number]) ? value || 'Laptop' : 'Laptop';
+}
+
+function normalizeAssignerLocation(value?: string) {
+  return ASSIGNER_LOCATIONS.includes(value as (typeof ASSIGNER_LOCATIONS)[number]) ? value || '' : '';
+}
+
 type TangibleFormState = {
   name: string;
   category: string;
@@ -22,27 +33,27 @@ type TangibleFormState = {
   employeeName: string;
   employeeContactNumber: string;
   employmentType: 'Permanent' | 'Contract';
+  employeeLocation: string;
   serialNumber: string;
   laptopModelNumber: string;
   laptopSpecifications: string;
   vendorName: string;
-  location: string;
 };
 
 const emptyForm = (): TangibleFormState => ({
   name: '',
-  category: 'Laptop',
+  category: '',
   status: 'Available',
   ownership: 'Company-Owned',
   assignerLocation: '',
   employeeName: '',
   employeeContactNumber: '',
   employmentType: 'Permanent',
+  employeeLocation: '',
   serialNumber: '',
   laptopModelNumber: '',
   laptopSpecifications: '',
   vendorName: '',
-  location: '',
 });
 
 export default function TangibleAssetManagement() {
@@ -55,6 +66,7 @@ export default function TangibleAssetManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<TangibleFormState>(emptyForm());
+  const employeeDetailsDisabled = form.status === 'Available';
 
   const today = new Date().toISOString().slice(0, 10);
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
@@ -79,18 +91,18 @@ export default function TangibleAssetManagement() {
     setEditingId(asset.id);
     setForm({
       name: asset.name || '',
-      category: asset.category || 'Laptop',
+      category: normalizeTangibleCategory(asset.category),
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
       ownership: asset.vendorName || asset.vendor ? 'Vendor Asset' : 'Company-Owned',
-      assignerLocation: asset.assignerLocation || '',
+      assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeContactNumber: asset.employeeContactNumber || '',
       employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
+      employeeLocation: asset.employeeLocation || '',
       serialNumber: asset.serialNumber || '',
       laptopModelNumber: asset.laptopModelNumber || '',
       laptopSpecifications: asset.laptopSpecifications || '',
       vendorName: asset.vendorName || asset.vendor || '',
-      location: asset.location || '',
     });
     setDialogOpen(true);
   };
@@ -127,13 +139,13 @@ export default function TangibleAssetManagement() {
         employeeName: form.employeeName,
         employeeContactNumber: form.employeeContactNumber,
         employmentType: form.employmentType,
+        employeeLocation: form.employeeLocation,
         serialNumber: form.serialNumber,
         laptopModelNumber: form.laptopModelNumber,
         laptopSpecifications: form.laptopSpecifications,
         vendorName: form.ownership === 'Vendor Asset' ? form.vendorName : '',
         vendor: form.ownership === 'Vendor Asset' ? form.vendorName : '',
         company: form.ownership === 'Company-Owned' ? 'Company-Owned' : '',
-        location: form.location,
         condition: form.status === 'Assigned' ? 'Used' : 'New',
       };
 
@@ -214,26 +226,29 @@ export default function TangibleAssetManagement() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-xl border bg-white">
-            <table className="min-w-[1200px] w-full text-sm">
+            <table className="min-w-[1700px] w-full text-sm">
               <thead className="bg-[#0b2a59] text-white">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Asset</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold">Assigner Name</th>
+                  <th className="px-4 py-3 text-left font-semibold">Category</th>
+                  <th className="px-4 py-3 text-left font-semibold">Asset Status</th>
                   <th className="px-4 py-3 text-left font-semibold">Ownership</th>
+                  <th className="px-4 py-3 text-left font-semibold">Assigner Location</th>
                   <th className="px-4 py-3 text-left font-semibold">Employee Name</th>
-                  <th className="px-4 py-3 text-left font-semibold">Contact No.</th>
+                  <th className="px-4 py-3 text-left font-semibold">Employee Contact Number</th>
                   <th className="px-4 py-3 text-left font-semibold">Employment Type</th>
+                  <th className="px-4 py-3 text-left font-semibold">Employee Location</th>
                   <th className="px-4 py-3 text-left font-semibold">Serial No.</th>
                   <th className="px-4 py-3 text-left font-semibold">Model No.</th>
+                  <th className="px-4 py-3 text-left font-semibold">Laptop Specifications</th>
                   <th className="px-4 py-3 text-left font-semibold">Vendor Name</th>
-                  <th className="px-4 py-3 text-left font-semibold">Location</th>
                   <th className="px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={14} className="px-4 py-10 text-center text-sm text-muted-foreground">
                       No tangible assets found.
                     </td>
                   </tr>
@@ -246,17 +261,20 @@ export default function TangibleAssetManagement() {
                           <p className="text-xs text-muted-foreground">{asset.id}</p>
                         </div>
                       </td>
+                      <td className="px-4 py-4">{asset.category || '—'}</td>
                       <td className="px-4 py-4">
                         <StatusBadge status={asset.status} />
                       </td>
                       <td className="px-4 py-4">{asset.vendor ? 'Vendor Asset' : 'Company-Owned'}</td>
+                      <td className="px-4 py-4">{asset.assignerLocation || '—'}</td>
                       <td className="px-4 py-4">{asset.employeeName || asset.assignedTo || '—'}</td>
                       <td className="px-4 py-4">{asset.employeeContactNumber || '—'}</td>
                       <td className="px-4 py-4">{asset.employmentType || '—'}</td>
+                      <td className="px-4 py-4">{asset.employeeLocation || '—'}</td>
                       <td className="px-4 py-4">{asset.serialNumber || '—'}</td>
                       <td className="px-4 py-4">{asset.laptopModelNumber || '—'}</td>
+                      <td className="px-4 py-4">{asset.laptopSpecifications || '—'}</td>
                       <td className="px-4 py-4">{asset.vendorName || asset.vendor || '—'}</td>
-                      <td className="px-4 py-4">{asset.location || '—'}</td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <Button type="button" variant="outline" size="sm" onClick={() => openEdit(asset)}>
@@ -287,12 +305,23 @@ export default function TangibleAssetManagement() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
+                <Label>Assigner Name</Label>
+                <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label>Category</Label>
-              <Input value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} />
+              <Select value={form.category} onValueChange={(value) => setForm((prev) => ({ ...prev, category: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TANGIBLE_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Asset Status</Label>
@@ -325,23 +354,68 @@ export default function TangibleAssetManagement() {
             </div>
             <div className="space-y-2">
               <Label>Assigner Location</Label>
-              <Input value={form.assignerLocation} onChange={(e) => setForm((prev) => ({ ...prev, assignerLocation: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employee Name</Label>
-              <Input value={form.employeeName} onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employee Contact Number</Label>
-              <Input value={form.employeeContactNumber} onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employment Type</Label>
-              <Select value={form.employmentType} onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={form.assignerLocation}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, assignerLocation: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Permanent">Permanent</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
+                  {ASSIGNER_LOCATIONS.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+              <div className="space-y-2">
+                <Label>Employee Name</Label>
+                <Input
+                  value={form.employeeName}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Employee Contact Number</Label>
+                <Input
+                  value={form.employeeContactNumber}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Employment Type</Label>
+                <Select
+                  value={form.employmentType}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}
+                >
+                  <SelectTrigger disabled={employeeDetailsDisabled}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Permanent">Permanent</SelectItem>
+                    <SelectItem value="Contract">Contract</SelectItem>
+                  </SelectContent>
+                </Select>
+            </div>
+              <div className="space-y-2">
+                <Label>Employee Location</Label>
+                <Select
+                  value={form.employeeLocation}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, employeeLocation: value }))}
+                >
+                  <SelectTrigger disabled={employeeDetailsDisabled}>
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNER_LOCATIONS.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -353,14 +427,15 @@ export default function TangibleAssetManagement() {
               <Label>Laptop Model Number</Label>
               <Input value={form.laptopModelNumber} onChange={(e) => setForm((prev) => ({ ...prev, laptopModelNumber: e.target.value }))} />
             </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Laptop Specifications</Label>
-              <Textarea
-                value={form.laptopSpecifications}
-                onChange={(e) => setForm((prev) => ({ ...prev, laptopSpecifications: e.target.value }))}
-                rows={3}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label>Laptop Specifications</Label>
+                <Textarea
+                  value={form.laptopSpecifications}
+                  onChange={(e) => setForm((prev) => ({ ...prev, laptopSpecifications: e.target.value }))}
+                  rows={1}
+                  className="min-h-11 resize-none"
+                />
+              </div>
             <div className="space-y-2">
               <Label>Vendor Name</Label>
               <Input
@@ -369,10 +444,6 @@ export default function TangibleAssetManagement() {
                 disabled={form.ownership === 'Company-Owned'}
                 placeholder={form.ownership === 'Company-Owned' ? 'Not required for company-owned assets' : 'Enter vendor name'}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <Input value={form.location} onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))} />
             </div>
           </div>
 

@@ -127,6 +127,7 @@ export interface Product {
     assigner_location?: string;
     employee_contact_number?: string;
     employment_type?: string;
+    employee_location?: string;
     laptop_model_number?: string;
     laptop_specifications?: string;
     vendor_name?: string;

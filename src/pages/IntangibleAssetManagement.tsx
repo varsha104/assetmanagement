@@ -12,6 +12,12 @@ import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Asset } from '@/types';
 
+const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
+
+function normalizeAssignerLocation(value?: string) {
+  return ASSIGNER_LOCATIONS.includes(value as (typeof ASSIGNER_LOCATIONS)[number]) ? value || '' : '';
+}
+
 type IntangibleFormState = {
   name: string;
   category: string;
@@ -20,6 +26,7 @@ type IntangibleFormState = {
   employeeName: string;
   employeeContactNumber: string;
   employmentType: 'Permanent' | 'Contract';
+  employeeLocation: string;
   subscriptionType: string;
   validityStartDate: string;
   validityEndDate: string;
@@ -35,6 +42,7 @@ const emptyForm = (): IntangibleFormState => ({
   employeeName: '',
   employeeContactNumber: '',
   employmentType: 'Permanent',
+  employeeLocation: '',
   subscriptionType: '',
   validityStartDate: '',
   validityEndDate: '',
@@ -52,6 +60,7 @@ export default function IntangibleAssetManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<IntangibleFormState>(emptyForm());
+  const employeeDetailsDisabled = form.status === 'Available';
 
   const intangibleAssets = assets.filter((asset) => asset.type === 'Intangible');
 
@@ -77,15 +86,16 @@ export default function IntangibleAssetManagement() {
       name: asset.name || '',
       category: asset.category || 'Software License',
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
-      assignerLocation: asset.assignerLocation || '',
-      employeeName: asset.employeeName || asset.assignedTo || '',
-      employeeContactNumber: asset.employeeContactNumber || '',
-      employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
-      subscriptionType: asset.subscriptionType || '',
-      validityStartDate: asset.validityStartDate || asset.purchaseDate || '',
-      validityEndDate: asset.validityEndDate || asset.warrantyPeriod || '',
-      renewalDate: asset.renewalDate || '',
-      amountPaid: asset.amountPaid != null ? String(asset.amountPaid) : '',
+        assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
+        employeeName: asset.employeeName || asset.assignedTo || '',
+        employeeContactNumber: asset.employeeContactNumber || '',
+        employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
+        employeeLocation: normalizeAssignerLocation(asset.employeeLocation),
+        subscriptionType: asset.subscriptionType || '',
+        validityStartDate: asset.validityStartDate || asset.purchaseDate || '',
+        validityEndDate: asset.validityEndDate || asset.warrantyPeriod || '',
+        renewalDate: asset.renewalDate || '',
+        amountPaid: asset.amountPaid != null ? String(asset.amountPaid) : '',
     });
     setDialogOpen(true);
   };
@@ -118,14 +128,15 @@ export default function IntangibleAssetManagement() {
         approvalStatus: 'Approved' as const,
         assignedTo: form.status === 'Assigned' && form.employeeName ? form.employeeName : undefined,
         createdBy: user?.id || 'higher_management',
-        assignerLocation: form.assignerLocation,
-        employeeName: form.employeeName,
-        employeeContactNumber: form.employeeContactNumber,
-        employmentType: form.employmentType,
-        subscriptionType: form.subscriptionType,
-        validityStartDate: form.validityStartDate,
-        validityEndDate: form.validityEndDate,
-        renewalDate: form.renewalDate,
+          assignerLocation: form.assignerLocation,
+          employeeName: form.employeeName,
+          employeeContactNumber: form.employeeContactNumber,
+          employmentType: form.employmentType,
+          employeeLocation: form.employeeLocation,
+          subscriptionType: form.subscriptionType,
+          validityStartDate: form.validityStartDate,
+          validityEndDate: form.validityEndDate,
+          renewalDate: form.renewalDate,
         amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
         vendor: '',
         licenseKey: '',
@@ -208,15 +219,17 @@ export default function IntangibleAssetManagement() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-xl border bg-white">
-            <table className="min-w-[1300px] w-full text-sm">
+            <table className="min-w-[1600px] w-full text-sm">
               <thead className="bg-[#0b2a59] text-white">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Asset</th>
+                  <th className="px-4 py-3 text-left font-semibold">Assigner Name</th>
+                  <th className="px-4 py-3 text-left font-semibold">Category</th>
                   <th className="px-4 py-3 text-left font-semibold">Status</th>
                   <th className="px-4 py-3 text-left font-semibold">Assigner Location</th>
                   <th className="px-4 py-3 text-left font-semibold">Employee Name</th>
                   <th className="px-4 py-3 text-left font-semibold">Contact No.</th>
                   <th className="px-4 py-3 text-left font-semibold">Employment Type</th>
+                  <th className="px-4 py-3 text-left font-semibold">Employee Location</th>
                   <th className="px-4 py-3 text-left font-semibold">Subscription Type</th>
                   <th className="px-4 py-3 text-left font-semibold">Start Date</th>
                   <th className="px-4 py-3 text-left font-semibold">Expiry Date</th>
@@ -228,7 +241,7 @@ export default function IntangibleAssetManagement() {
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={14} className="px-4 py-10 text-center text-sm text-muted-foreground">
                       No intangible assets found.
                     </td>
                   </tr>
@@ -241,6 +254,7 @@ export default function IntangibleAssetManagement() {
                           <p className="text-xs text-muted-foreground">{asset.id}</p>
                         </div>
                       </td>
+                      <td className="px-4 py-4">{asset.category || '—'}</td>
                       <td className="px-4 py-4">
                         <StatusBadge status={asset.status} />
                       </td>
@@ -248,6 +262,7 @@ export default function IntangibleAssetManagement() {
                       <td className="px-4 py-4">{asset.employeeName || asset.assignedTo || '—'}</td>
                       <td className="px-4 py-4">{asset.employeeContactNumber || '—'}</td>
                       <td className="px-4 py-4">{asset.employmentType || '—'}</td>
+                      <td className="px-4 py-4">{asset.employeeLocation || '—'}</td>
                       <td className="px-4 py-4">{asset.subscriptionType || '—'}</td>
                       <td className="px-4 py-4">{asset.validityStartDate || asset.purchaseDate || '—'}</td>
                       <td className="px-4 py-4">{asset.validityEndDate || asset.warrantyPeriod || '—'}</td>
@@ -283,7 +298,7 @@ export default function IntangibleAssetManagement() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Name</Label>
+              <Label>Assigner Name</Label>
               <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
@@ -302,30 +317,86 @@ export default function IntangibleAssetManagement() {
             </div>
             <div className="space-y-2">
               <Label>Assigner Location</Label>
-              <Input value={form.assignerLocation} onChange={(e) => setForm((prev) => ({ ...prev, assignerLocation: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employee Name</Label>
-              <Input value={form.employeeName} onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employee Contact Number</Label>
-              <Input value={form.employeeContactNumber} onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employment Type</Label>
-              <Select value={form.employmentType} onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={form.assignerLocation}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, assignerLocation: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Permanent">Permanent</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
+                  {ASSIGNER_LOCATIONS.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Subscription Type</Label>
-              <Input value={form.subscriptionType} onChange={(e) => setForm((prev) => ({ ...prev, subscriptionType: e.target.value }))} />
-            </div>
+              <div className="space-y-2">
+                <Label>Employee Name</Label>
+                <Input
+                  value={form.employeeName}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Employee Contact Number</Label>
+                <Input
+                  value={form.employeeContactNumber}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Employment Type</Label>
+                <Select
+                  value={form.employmentType}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}
+                >
+                  <SelectTrigger disabled={employeeDetailsDisabled}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Permanent">Permanent</SelectItem>
+                    <SelectItem value="Contract">Contract</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Employee Location</Label>
+                <Select
+                  value={form.employeeLocation}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, employeeLocation: value }))}
+                >
+                  <SelectTrigger disabled={employeeDetailsDisabled}>
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ASSIGNER_LOCATIONS.map((location) => (
+                      <SelectItem key={location} value={location}>
+                        {location}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                  <Label>Subscription Type</Label>
+                  <Select
+                    value={form.subscriptionType}
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, subscriptionType: value }))}
+                  >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Monthly">Monthly</SelectItem>
+                    <SelectItem value="Annually">Annually</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             <div className="space-y-2">
               <Label>Start Date</Label>
               <Input type="date" value={form.validityStartDate} onChange={(e) => setForm((prev) => ({ ...prev, validityStartDate: e.target.value }))} />
