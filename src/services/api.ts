@@ -113,6 +113,7 @@ export const authApi = {
 export interface Product {
     id: number;
     product_name: string;
+    asset_name?: string;
     company: string;
     serial_number: string;
     condition: string;

@@ -42,6 +42,7 @@ function mapProductToAsset(product: Product): Asset {
   return {
     id: String(product.id),
     name: product.product_name || '',
+    assetName: product.asset_name || product.product_name || '',
     type: 'Tangible' as AssetType,
     category: product.category || 'General',
     purchaseDate: product.purchase_date || '',
@@ -275,6 +276,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (asset.type === 'Tangible') {
       const result = await productApi.add({
         product_name: asset.name,
+        asset_name: asset.assetName || '',
         company: asset.company || '',
         category: asset.category,
         serial_number: asset.serialNumber || '',
@@ -359,6 +361,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       const payload: Record<string, unknown> = {
         product_name: updates.name,
+        asset_name: updates.assetName,
         category: updates.category,
         company: updates.company,
         serial_number: updates.serialNumber,

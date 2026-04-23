@@ -36,6 +36,7 @@ function normalizeAssignerLocation(value?: string) {
 
 type TangibleFormState = {
   name: string;
+  assetName: string;
   category: string;
   customCategory: string;
   status: 'Available' | 'Assigned';
@@ -54,6 +55,7 @@ type TangibleFormState = {
 
 const emptyForm = (): TangibleFormState => ({
   name: '',
+  assetName: '',
   category: '',
   customCategory: '',
   status: 'Available',
@@ -92,6 +94,7 @@ export default function TangibleAssetManagement() {
   const filteredAssets = tangibleAssets.filter((asset) => {
     const matchesSearch =
       asset.name.toLowerCase().includes(search.toLowerCase()) ||
+      (asset.assetName || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.serialNumber || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.location || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.vendorName || asset.vendor || '').toLowerCase().includes(search.toLowerCase());
@@ -109,6 +112,7 @@ export default function TangibleAssetManagement() {
     setEditingId(asset.id);
     setForm({
       name: asset.name || '',
+      assetName: asset.assetName || '',
       category: normalizeTangibleCategory(asset.category),
       customCategory: isStandardTangibleCategory(asset.category) ? '' : asset.category || '',
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
@@ -136,10 +140,10 @@ export default function TangibleAssetManagement() {
   const handleSubmit = async () => {
     const resolvedCategory = form.category === 'Other' ? form.customCategory.trim() : form.category;
 
-    if (!form.name || !resolvedCategory || !form.serialNumber) {
+    if (!form.name || !form.assetName || !resolvedCategory || !form.serialNumber) {
       toast({
         title: 'Missing fields',
-        description: 'Please enter asset name, category, and serial number.',
+        description: 'Please enter assigner name, category, asset name, and serial number.',
         variant: 'destructive',
       });
       return;
@@ -149,6 +153,7 @@ export default function TangibleAssetManagement() {
     try {
       const payload = {
         name: form.name,
+        assetName: form.assetName,
         type: 'Tangible' as const,
         category: resolvedCategory,
         purchaseDate: today,
@@ -271,7 +276,7 @@ export default function TangibleAssetManagement() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, serial number, vendor, or location"
+            placeholder="Search by assigner name, asset name, serial number, vendor, or location"
             className="h-11 pl-10"
           />
         </div>
@@ -295,10 +300,11 @@ export default function TangibleAssetManagement() {
 
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[2100px] w-full table-fixed text-sm">
+          <table className="min-w-[2250px] w-full table-fixed text-sm">
             <colgroup>
-              <col className="w-[240px]" />
-              <col className="w-[140px]" />
+              <col className="w-[200px]" />
+              <col className="w-[150px]" />
+              <col className="w-[200px]" />
               <col className="w-[140px]" />
               <col className="w-[170px]" />
               <col className="w-[180px]" />
@@ -317,6 +323,7 @@ export default function TangibleAssetManagement() {
               <tr>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset Name</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset Status</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Location</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Name</th>
@@ -335,7 +342,7 @@ export default function TangibleAssetManagement() {
             <tbody>
               {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={16} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No tangible assets found.
                   </td>
                 </tr>
@@ -344,11 +351,12 @@ export default function TangibleAssetManagement() {
                   <tr key={asset.id} className="border-t">
                     <td className="px-4 py-4">
                       <div>
-                        <p className="font-medium text-slate-900">{asset.name}</p>
+                        <p className="font-medium text-slate-900">{asset.name || '—'}</p>
                         <p className="text-xs text-muted-foreground">{asset.id}</p>
                       </div>
                     </td>
                     <td className="px-4 py-4">{asset.category || '-'}</td>
+                    <td className="px-4 py-4">{asset.assetName || asset.name || '—'}</td>
                     <td className="px-4 py-4">
                       <StatusBadge status={asset.status} />
                     </td>
@@ -421,8 +429,8 @@ export default function TangibleAssetManagement() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-                <Label>Assigner Name</Label>
-                <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
+              <Label>Assigner Name</Label>
+              <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label>Category</Label>
@@ -458,6 +466,10 @@ export default function TangibleAssetManagement() {
                   />
                 </div>
               ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label>Asset Name</Label>
+              <Input value={form.assetName} onChange={(e) => setForm((prev) => ({ ...prev, assetName: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label>Asset Status</Label>
