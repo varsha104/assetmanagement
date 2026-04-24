@@ -162,6 +162,12 @@ export const productApi = {
             body: JSON.stringify(payload),
         }),
 
+    /** Delete a tangible product */
+    delete: (id: number) =>
+        request<{ message: string; product_id: number }>(`/products/delete/${id}`, {
+            method: 'POST',
+        }),
+
     // Legacy tangible actions kept for reference only:
     // assignEmployee: (productId: number, payload: { user_id: string | number; location: string }) =>
     //     request<{ message: string }>(`/assign_employee/${productId}`, {
@@ -266,6 +272,7 @@ export interface Employee {
     email: string;
     username: string;
     department: string;
+    phone_number?: string;
 }
 
 export const employeeApi = {

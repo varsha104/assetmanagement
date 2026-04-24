@@ -105,7 +105,7 @@ function mapProductToAsset(product: Product): Asset {
     condition,
     employeeContactNumber: product.employee_contact_number || '',
     employmentType: product.employment_type || '',
-    assignerName: product.assigner_name || '',
+    assignerName: product.assigner_name || product.created_by || '',
     ownership: product.ownership || (product.vendor_name || product.vendor ? 'Vendor Asset' : 'Company-Owned'),
     // Tangible-specific
     serialNumber: product.serial_number || '',
@@ -173,6 +173,7 @@ interface UserInfo {
   username: string;
   name: string;
   email: string;
+  phoneNumber?: string;
   role: string;
   department: string;
 }
@@ -187,7 +188,7 @@ interface DataContextType {
   refreshData: () => Promise<void>;
   addAsset: (asset: Partial<Asset> & { type: AssetType }) => Promise<void>;
   updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
-  deleteAsset: (id: string) => void;
+  deleteAsset: (id: string) => Promise<void>;
   addAssignment: (assignment: Omit<AssetAssignment, 'id' | 'approvalStatus'>) => void;
   returnAsset: (assignmentId: string) => void;
   addIssue: (issue: Omit<Issue, 'id' | 'createdAt' | 'status'>) => Promise<void>;
@@ -242,8 +243,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       setAssets(sortAssetsNewestFirst([...tangibleAssets, ...intangibleAssets]));
 
-      if (isDashboardRoute) {
-        // Dashboard is the only place that needs the employee directory.
+      if (isDashboardRoute || isTangibleRoute) {
+        // Dashboard and tangible asset creation both need the employee directory.
         const empResult = await employeeApi.getAll();
         if (empResult.ok && empResult.data) {
           const rawEmp = empResult.data as unknown as { employees?: Employee[] };
@@ -254,6 +255,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               username: e.username || '',
               name: e.name || '',
               email: e.email || '',
+              phoneNumber: e.phone_number || '',
               role: e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '',
               department: e.department || '',
             }))
@@ -295,7 +297,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         assignedTo: asset.assignedTo || '',
         serialNumber: asset.serialNumber || '',
         name: asset.assignerName || '',
-        createdBy: asset.createdBy || '',
+        createdBy: asset.assignerName || asset.createdBy || '',
         type: asset.type,
         category: asset.category,
         company: asset.company || asset.vendorName || asset.vendor || '',
@@ -377,13 +379,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const nextStatusKey = toStatusKey(mergedStatus);
 
       const payload: Record<string, unknown> = {
-        product_name: updates.assetName ?? currentAsset?.assetName ?? currentAsset?.name ?? '',
+        assetName: updates.assetName ?? currentAsset?.assetName ?? currentAsset?.name ?? '',
+        type: currentAsset?.type ?? 'Tangible',
+        category: updates.category ?? currentAsset?.category ?? '',
         company: updates.company ?? currentAsset?.company ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? '',
+        warrantyPeriod: updates.warrantyPeriod ?? currentAsset?.warrantyPeriod ?? '',
         condition: updates.condition ?? currentAsset?.condition ?? '',
-        serial_number: updates.serialNumber ?? currentAsset?.serialNumber ?? '',
+        serialNumber: updates.serialNumber ?? currentAsset?.serialNumber ?? '',
         status: mapFrontendStatusToBackend(mergedStatus, 'Tangible'),
+        approvalStatus: updates.approvalStatus ?? currentAsset?.approvalStatus ?? 'Approved',
+        name: updates.assignerName ?? currentAsset?.assignerName ?? currentAsset?.createdBy ?? '',
+        assignerLocation: updates.assignerLocation ?? currentAsset?.assignerLocation ?? '',
+        employeeName: updates.employeeName ?? currentAsset?.employeeName ?? '',
+        employeeContactNumber: updates.employeeContactNumber ?? currentAsset?.employeeContactNumber ?? '',
+        employmentType: updates.employmentType ?? currentAsset?.employmentType ?? '',
+        employeeLocation: updates.employeeLocation ?? currentAsset?.employeeLocation ?? '',
+        laptopModelNumber: updates.laptopModelNumber ?? currentAsset?.laptopModelNumber ?? '',
+        laptopSpecifications: updates.laptopSpecifications ?? currentAsset?.laptopSpecifications ?? '',
       };
-      setIfPresent(payload, 'purchase_date', updates.purchaseDate ?? currentAsset?.purchaseDate);
+      setIfPresent(payload, 'purchaseDate', updates.purchaseDate ?? currentAsset?.purchaseDate);
+
+      const assignedTo = updates.assignedTo ?? currentAsset?.assignedTo;
+      if (assignedTo) {
+        payload.assignedTo = assignedTo;
+      }
 
       if (nextStatusKey === 'AVAILABLE') {
         payload.status = mapFrontendStatusToBackend('Available', 'Tangible');
@@ -395,10 +414,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await refreshData();
   }, [assets, refreshData]);
 
-  const deleteAsset = useCallback((id: string) => {
-    // Remove from local state (backend delete not available in existing API)
+  const deleteAsset = useCallback(async (id: string) => {
+    const currentAsset = assets.find((asset) => asset.id === id);
+
+    if (currentAsset?.type === 'Tangible') {
+      const numericId = parseInt(id, 10);
+      const result = await productApi.delete(numericId);
+      if (!result.ok) throw new Error(result.error || 'Failed to delete tangible asset');
+      await refreshData();
+      return;
+    }
+
+    // Intangible delete endpoint is not wired yet, so keep the existing local fallback there.
     setAssets(prev => prev.filter(a => a.id !== id));
-  }, []);
+  }, [assets, refreshData]);
 
   const addAssignment = useCallback(async (assignment: Omit<AssetAssignment, 'id' | 'approvalStatus'>) => {
     // Legacy assignment flow kept for reference only.

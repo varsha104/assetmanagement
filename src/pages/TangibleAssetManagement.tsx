@@ -42,6 +42,7 @@ type TangibleFormState = {
   status: 'Available' | 'Assigned';
   ownership: 'Company-Owned' | 'Vendor Asset';
   assignerLocation: string;
+  employeeId: string;
   employeeName: string;
   employeeContactNumber: string;
   employmentType: 'Permanent' | 'Contract';
@@ -61,6 +62,7 @@ const emptyForm = (): TangibleFormState => ({
   status: 'Available',
   ownership: 'Company-Owned',
   assignerLocation: '',
+  employeeId: '',
   employeeName: '',
   employeeContactNumber: '',
   employmentType: 'Permanent',
@@ -74,7 +76,7 @@ const emptyForm = (): TangibleFormState => ({
 
 export default function TangibleAssetManagement() {
   const { user } = useAuth();
-  const { assets, addAsset, updateAsset, deleteAsset, addIssue, isLoading } = useData();
+  const { assets, addAsset, updateAsset, deleteAsset, addIssue, employees, isLoading } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Available' | 'Assigned'>('all');
@@ -89,6 +91,7 @@ export default function TangibleAssetManagement() {
   const [form, setForm] = useState<TangibleFormState>(emptyForm());
   const employeeDetailsDisabled = form.status === 'Available';
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
+  const employeeOptions = employees;
 
   const filteredAssets = tangibleAssets.filter((asset) => {
     const matchesSearch =
@@ -108,6 +111,8 @@ export default function TangibleAssetManagement() {
   };
 
   const openEdit = (asset: Asset) => {
+    const matchedEmployee = employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
+
     setEditingId(asset.id);
     setForm({
       name: asset.assignerName || '',
@@ -117,8 +122,9 @@ export default function TangibleAssetManagement() {
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
       ownership: (asset.ownership || (asset.vendorName || asset.vendor ? 'Vendor Asset' : 'Company-Owned')) as 'Company-Owned' | 'Vendor Asset',
       assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
+      employeeId: matchedEmployee?.id || '',
       employeeName: asset.employeeName || asset.assignedTo || '',
-      employeeContactNumber: asset.employeeContactNumber || '',
+      employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
       employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
       employeeLocation: asset.employeeLocation || '',
       serialNumber: asset.serialNumber || '',
@@ -156,7 +162,7 @@ export default function TangibleAssetManagement() {
         type: 'Tangible' as const,
         category: resolvedCategory,
         status: form.status,
-        assignedTo: form.status === 'Assigned' && form.employeeName ? form.employeeName : undefined,
+        assignedTo: form.status === 'Assigned' && form.employeeId ? form.employeeId : undefined,
         assignerLocation: form.assignerLocation,
         ownership: form.ownership,
         employeeName: form.employeeName,
@@ -190,8 +196,16 @@ export default function TangibleAssetManagement() {
   };
 
   const handleDelete = async (id: string) => {
-    deleteAsset(id);
-    toast({ title: 'Tangible asset removed' });
+    try {
+      await deleteAsset(id);
+      toast({ title: 'Tangible asset removed' });
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: error instanceof Error ? error.message : 'Unable to delete tangible asset.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const openActionDialog = (asset: Asset, mode: 'repair' | 'replacement') => {
@@ -297,40 +311,37 @@ export default function TangibleAssetManagement() {
 
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[2250px] w-full table-fixed text-sm">
+          <table className="min-w-[1680px] w-full table-fixed text-sm">
             <colgroup>
-              <col className="w-[200px]" />
-              <col className="w-[150px]" />
-              <col className="w-[200px]" />
-              <col className="w-[140px]" />
-              <col className="w-[170px]" />
-              <col className="w-[180px]" />
-              <col className="w-[190px]" />
-              <col className="w-[160px]" />
-              <col className="w-[170px]" />
-              <col className="w-[150px]" />
-              <col className="w-[170px]" />
-              <col className="w-[120px]" />
-              <col className="w-[170px]" />
-              <col className="w-[160px]" />
-              <col className="w-[220px]" />
-              <col className="w-[130px]" />
+              <col className="w-[12%]" />
+              <col className="w-[8%]" />
+              <col className="w-[12%]" />
+              <col className="w-[10%]" />
+              <col className="w-[11%]" />
+              <col className="w-[14%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[8%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[12%]" />
+              <col className="w-[7%]" />
             </colgroup>
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset Status</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Location</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Ownership</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Vendor Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Amount</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Serial No.</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Model No.</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Specifications</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Actions</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Assigner Name</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Category</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Asset Name</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Asset Status</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Assigner Location</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Emp Name</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Ownership</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Vendor Name</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Amount</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Serial No.</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Model No.</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Specifications</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -505,11 +516,31 @@ export default function TangibleAssetManagement() {
             </div>
               <div className="space-y-2">
                 <Label>Employee Name</Label>
-                <Input
-                  value={form.employeeName}
-                  onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))}
+                <Select
+                  value={form.employeeId || undefined}
+                  onValueChange={(value) => {
+                    const selectedEmployee = employeeOptions.find((employee) => employee.id === value);
+
+                    setForm((prev) => ({
+                      ...prev,
+                      employeeId: value,
+                      employeeName: selectedEmployee?.name || '',
+                      employeeContactNumber: selectedEmployee?.phoneNumber || '',
+                    }));
+                  }}
                   disabled={employeeDetailsDisabled}
-                />
+                >
+                  <SelectTrigger disabled={employeeDetailsDisabled}>
+                    <SelectValue placeholder={employeeOptions.length ? 'Select employee' : 'No employees available'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employeeOptions.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Employee Contact Number</Label>
