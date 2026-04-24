@@ -1,7 +1,8 @@
-﻿import { useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
+import { ColumnFilter, getUniqueValues } from '@/components/ColumnFilter';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -21,6 +22,51 @@ import { Asset } from '@/types';
 
 const TANGIBLE_CATEGORIES = ['Laptop', 'Desktop', 'Mouse', 'Headset'] as const;
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
+type TangibleFilterKey =
+  | 'assignerName'
+  | 'category'
+  | 'assetName'
+  | 'status'
+  | 'assignerLocation'
+  | 'employeeName'
+  | 'ownership'
+  | 'vendorName'
+  | 'amount'
+  | 'serialNumber'
+  | 'modelNumber'
+  | 'specifications';
+
+const TANGIBLE_FILTER_KEYS: TangibleFilterKey[] = [
+  'assignerName',
+  'category',
+  'assetName',
+  'status',
+  'assignerLocation',
+  'employeeName',
+  'ownership',
+  'vendorName',
+  'amount',
+  'serialNumber',
+  'modelNumber',
+  'specifications',
+];
+
+const getOwnershipLabel = (asset: Asset) => (asset.vendor ? 'Vendor Asset' : 'Company-Owned');
+
+const tangibleFilterAccessors: Record<TangibleFilterKey, (asset: Asset) => string> = {
+  assignerName: (asset) => asset.assignerName || '—',
+  category: (asset) => asset.category || '—',
+  assetName: (asset) => asset.assetName || '—',
+  status: (asset) => asset.status || '—',
+  assignerLocation: (asset) => asset.assignerLocation || '—',
+  employeeName: (asset) => asset.employeeName || asset.assignedTo || '—',
+  ownership: (asset) => getOwnershipLabel(asset),
+  vendorName: (asset) => asset.vendorName || asset.vendor || '—',
+  amount: (asset) => (asset.amount != null ? String(asset.amount) : '—'),
+  serialNumber: (asset) => asset.serialNumber || '—',
+  modelNumber: (asset) => asset.laptopModelNumber || '—',
+  specifications: (asset) => asset.laptopSpecifications || '—',
+};
 
 function normalizeTangibleCategory(value?: string) {
   return TANGIBLE_CATEGORIES.includes(value as (typeof TANGIBLE_CATEGORIES)[number]) ? value || 'Laptop' : 'Other';
@@ -88,10 +134,35 @@ export default function TangibleAssetManagement() {
   const [actionReason, setActionReason] = useState('');
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
   const [employeeInfoAsset, setEmployeeInfoAsset] = useState<Asset | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<TangibleFilterKey, string[]>>({
+    assignerName: [],
+    category: [],
+    assetName: [],
+    status: [],
+    assignerLocation: [],
+    employeeName: [],
+    ownership: [],
+    vendorName: [],
+    amount: [],
+    serialNumber: [],
+    modelNumber: [],
+    specifications: [],
+  });
   const [form, setForm] = useState<TangibleFormState>(emptyForm());
   const employeeDetailsDisabled = form.status === 'Available';
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
   const employeeOptions = employees;
+  const columnFilterOptions = useMemo(
+    () =>
+      TANGIBLE_FILTER_KEYS.reduce(
+        (acc, key) => {
+          acc[key] = getUniqueValues(tangibleAssets, tangibleFilterAccessors[key]);
+          return acc;
+        },
+        {} as Record<TangibleFilterKey, string[]>,
+      ),
+    [tangibleAssets],
+  );
 
   const filteredAssets = tangibleAssets.filter((asset) => {
     const matchesSearch =
@@ -101,8 +172,15 @@ export default function TangibleAssetManagement() {
       (asset.location || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.vendorName || asset.vendor || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesColumnFilters = TANGIBLE_FILTER_KEYS.every((key) => {
+      const selectedValues = columnFilters[key];
+      if (selectedValues.length === 0) return true;
+      return selectedValues.includes(tangibleFilterAccessors[key](asset));
+    });
+    return matchesSearch && matchesStatus && matchesColumnFilters;
   });
+  const totalAssetsCount = tangibleAssets.length;
+  const filteredAssetsCount = filteredAssets.length;
 
   const openAdd = () => {
     setEditingId(null);
@@ -309,6 +387,15 @@ export default function TangibleAssetManagement() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
+          Total: {totalAssetsCount}
+        </span>
+        <span className="rounded-md border bg-blue-50 px-3 py-1 font-medium text-blue-700">
+          Filtered: {filteredAssetsCount}
+        </span>
+      </div>
+
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
           <table className="min-w-[1680px] w-full table-fixed text-sm">
@@ -329,18 +416,114 @@ export default function TangibleAssetManagement() {
             </colgroup>
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Assigner Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Category</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Asset Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Asset Status</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Assigner Location</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Emp Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Ownership</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Vendor Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Amount</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Serial No.</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Model No.</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Specifications</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Assigner Name"
+                    options={columnFilterOptions.assignerName}
+                    selected={columnFilters.assignerName}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, assignerName: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Category"
+                    options={columnFilterOptions.category}
+                    selected={columnFilters.category}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, category: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Asset Name"
+                    options={columnFilterOptions.assetName}
+                    selected={columnFilters.assetName}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, assetName: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Asset Status"
+                    options={columnFilterOptions.status}
+                    selected={columnFilters.status}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, status: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Assigner Location"
+                    options={columnFilterOptions.assignerLocation}
+                    selected={columnFilters.assignerLocation}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, assignerLocation: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Emp Name"
+                    options={columnFilterOptions.employeeName}
+                    selected={columnFilters.employeeName}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeName: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Ownership"
+                    options={columnFilterOptions.ownership}
+                    selected={columnFilters.ownership}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, ownership: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Vendor Name"
+                    options={columnFilterOptions.vendorName}
+                    selected={columnFilters.vendorName}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, vendorName: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Amount"
+                    options={columnFilterOptions.amount}
+                    selected={columnFilters.amount}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, amount: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Serial No."
+                    options={columnFilterOptions.serialNumber}
+                    selected={columnFilters.serialNumber}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, serialNumber: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Model No."
+                    options={columnFilterOptions.modelNumber}
+                    selected={columnFilters.modelNumber}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, modelNumber: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Specifications"
+                    options={columnFilterOptions.specifications}
+                    selected={columnFilters.specifications}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, specifications: selected }))}
+                    dark
+                  />
+                </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Actions</th>
               </tr>
             </thead>
@@ -721,3 +904,4 @@ export default function TangibleAssetManagement() {
     </div>
   );
 }
+
