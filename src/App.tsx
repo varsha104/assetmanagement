@@ -32,8 +32,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <DataProvider>
-          <BrowserRouter>
+        <BrowserRouter>
+          <DataProvider>
             <Routes>
               <Route path="/login" element={<LoginGate />} />
               <Route
@@ -50,8 +50,8 @@ const App = () => (
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
-          </BrowserRouter>
-        </DataProvider>
+          </DataProvider>
+        </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

@@ -112,26 +112,35 @@ export const authApi = {
 
 export interface Product {
     id: number;
-    product_name: string;
+    product_name?: string;
+    productName?: string;
+    assigner_name?: string;
+    name?: string;
     asset_name?: string;
-    company: string;
-    serial_number: string;
-    condition: string;
-    purchase_date: string;
-    status: string;
-    amount?: number;
-    assigned_to?: string | null;
-    user_id?: number | null;
-    Location?: string;
-    location?: string;
+    assetName?: string;
     category?: string;
+    status: string;
+    approval_status?: string;
+    company?: string;
     assigner_location?: string;
+    assigned_to?: string | null;
+    assignedTo?: string | null;
+    employee_name?: string;
     employee_contact_number?: string;
     employment_type?: string;
     employee_location?: string;
+    ownership?: string;
+    vendor_name?: string;
+    vendor?: string;
+    amount?: number;
+    serial_number?: string;
+    serialnumber: string;
+    purchase_date?: string;
+    condition?: string;
+    warranty_period?: string;
+    created_by?: string;
     laptop_model_number?: string;
     laptop_specifications?: string;
-    vendor_name?: string;
 }
 
 export const productApi = {
@@ -153,40 +162,34 @@ export const productApi = {
             body: JSON.stringify(payload),
         }),
 
-    /** Assign employee to a tangible product */
-    assignEmployee: (productId: number, payload: { user_id: string | number; location: string }) =>
-        request<{ message: string }>(`/assign_employee/${productId}`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
-
-    /** Get tangible report summary */
-    getReportSummary: () =>
-        request<unknown>('/reports/product_summary', { method: 'GET' }),
-
-    /** Employee verify return (hijacked route) */
-    verifyReturn: (productId: number) =>
-        request<{ message: string }>(`/employee-return-asset/${productId}`, {
-            method: 'POST',
-        }),
-
-    /** IT Admin verify return accepted */
+    // Legacy tangible actions kept for reference only:
+    // assignEmployee: (productId: number, payload: { user_id: string | number; location: string }) =>
+    //     request<{ message: string }>(`/assign_employee/${productId}`, {
+    //         method: 'POST',
+    //         body: JSON.stringify(payload),
+    //     }),
+    // getReportSummary: () =>
+    //     request<unknown>('/reports/product_summary', { method: 'GET' }),
+    // verifyReturn: (productId: number) =>
+    //     request<{ message: string }>(`/employee-return-asset/${productId}`, {
+    //         method: 'POST',
+    //     }),
+    // itadminVerifyReturn: (productId: number) =>
+    //     request<{ message: string }>(`/verify-return/${productId}`, {
+    //         method: 'POST',
+    //     }),
     itadminVerifyReturn: (productId: number) =>
         request<{ message: string }>(`/verify-return/${productId}`, {
             method: 'POST',
         }),
-
-    /** Mark asset obsolete / disposal */
-    markAssetObsolete: (productId: number) =>
-        request<{ message: string }>(`/mark-asset-obsolete/${productId}`, {
-            method: 'POST',
-        }),
-
-    /** Higher Management dispose asset */
-    hmDisposeAsset: (productId: number) =>
-        request<{ message: string }>(`/management-approve-disposal/${productId}`, {
-            method: 'POST',
-        }),
+    // markAssetObsolete: (productId: number) =>
+    //     request<{ message: string }>(`/mark-asset-obsolete/${productId}`, {
+    //         method: 'POST',
+    //     }),
+    // hmDisposeAsset: (productId: number) =>
+    //     request<{ message: string }>(`/management-approve-disposal/${productId}`, {
+    //         method: 'POST',
+    //     }),
 };
 
 // ─── Intangible Asset APIs ──────────────────────────────────────────────────
@@ -207,11 +210,15 @@ export interface IntangibleAsset {
     licenseKey?: string;
     vendor?: string;
     subscription_type?: string;
+    Subscription_type?: string;
     subscription_renewal_date?: string;
+    Subscription_renewal_date?: string;
     category?: string;
     assigner_location?: string;
+    employee_name?: string;
     employee_contact_number?: string;
     employment_type?: string;
+    employee_location?: string;
     amount_paid?: number;
 }
 
@@ -234,27 +241,21 @@ export const intangibleApi = {
             body: JSON.stringify(payload),
         }),
 
-    /** Assign intangible assets to an employee */
-    assignToEmployee: (employeeId: number, payload: { asset_id: number; assigned_to: string; location?: string }) =>
-        request<{ message: string }>(`/assign-intangible-assets/${employeeId}`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
-
-    /** Get intangible report summary */
-    getReportSummary: () =>
-        request<unknown>('/reports/intangible_summary', { method: 'GET' }),
-
-    /** Get intangible assets pending approval */
-    getIntangibleForApproval: () =>
-        request<IntangibleAsset[]>('/get-intangible-assets', { method: 'GET' }),
-
-    /** Approve/Reject intangible asset request */
-    updateApprovalStatus: (id: number, payload: { approval_status: string }) =>
-        request<{ message: string }>(`/intangible-assets/${id}`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
+    // Legacy intangible actions kept for reference only:
+    // assignToEmployee: (employeeId: number, payload: { asset_id: number; assigned_to: string; location?: string }) =>
+    //     request<{ message: string }>(`/assign-intangible-assets/${employeeId}`, {
+    //         method: 'POST',
+    //         body: JSON.stringify(payload),
+    //     }),
+    // getReportSummary: () =>
+    //     request<unknown>('/reports/intangible_summary', { method: 'GET' }),
+    // getIntangibleForApproval: () =>
+    //     request<IntangibleAsset[]>('/get-intangible-assets', { method: 'GET' }),
+    // updateApprovalStatus: (id: number, payload: { approval_status: string }) =>
+    //     request<{ message: string }>(`/intangible-assets/${id}`, {
+    //         method: 'POST',
+    //         body: JSON.stringify(payload),
+    //     }),
 };
 
 // ─── Employee APIs ──────────────────────────────────────────────────────────
@@ -272,25 +273,21 @@ export const employeeApi = {
     getAll: () =>
         request<Employee[]>('/employees', { method: 'GET' }),
 
-    /** Get assets assigned to a specific employee */
-    getEmployeeAssets: (employeeId: number) =>
-        request<{ products: Product[]; intangible_assets: IntangibleAsset[] }>(
-            `/api/assets/${employeeId}`,
-            { method: 'GET' }
-        ),
-
-    /** Get intangible assets for a specific employee */
-    getEmployeeIntangibleAssets: (employeeId: number) =>
-        request<IntangibleAsset[]>(`/intangible-assets/${employeeId}`, {
-            method: 'GET',
-        }),
-
-    /** Employee initiate exit */
-    initiateExit: (payload: { user_id: number }) =>
-        request<{ message: string }>('/initiate-exit', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
+    // Legacy employee helpers kept for reference only:
+    // getEmployeeAssets: (employeeId: number) =>
+    //     request<{ products: Product[]; intangible_assets: IntangibleAsset[] }>(
+    //         `/api/assets/${employeeId}`,
+    //         { method: 'GET' }
+    //     ),
+    // getEmployeeIntangibleAssets: (employeeId: number) =>
+    //     request<IntangibleAsset[]>(`/intangible-assets/${employeeId}`, {
+    //         method: 'GET',
+    //     }),
+    // initiateExit: (payload: { user_id: number }) =>
+    //     request<{ message: string }>('/initiate-exit', {
+    //         method: 'POST',
+    //         body: JSON.stringify(payload),
+    //     }),
 };
 
 // ─── Asset Request / Approval APIs ──────────────────────────────────────────
@@ -305,56 +302,42 @@ export interface AssetRequest {
     approval_status?: string;
 }
 
+/* Legacy request/approval flow kept for reference only.
 export const assetRequestApi = {
-    /** Get all asset approval requests (HR) */
     getAll: () =>
         request<AssetRequest[]>('/assets', { method: 'GET' }),
 
-    /** Submit new asset request (Technician) */
     submitRequest: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/assets/request', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** Approve or Reject an asset request (decision) */
     makeDecision: (id: number, payload: { status: string }) =>
         request<{ message: string }>(`/assets/decision/${id}`, {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
-
-    /** Get pending additional asset approval requests */
-    getPendingApprovals: () =>
-        request<{ pending_assets: AssetRequest[] }>('/pending_approval_assets', {
-            method: 'GET',
-        }),
-
-    /** Update approval status of an additional asset */
-    updateApprovalStatus: (id: number, payload: { approval_status: string }) =>
-        request<{ message: string }>(`/update_approval_status/${id}`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
 };
+*/
 
 // ─── Additional Asset APIs ──────────────────────────────────────────────────
 
+/* Legacy additional-asset flow kept for reference only.
 export const additionalAssetApi = {
-    /** Request additional tangible asset */
     addTangible: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/add_additional_asset', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** Request additional intangible asset */
     addIntangible: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/additional_intangible_asset', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 };
+*/
 
 // ─── Repair / Issue APIs ────────────────────────────────────────────────────
 
@@ -373,17 +356,6 @@ export interface Repair {
 }
 
 export const repairApi = {
-    /** Get all repairs */
-    getAll: () =>
-        request<Repair[]>('/get_repairs', { method: 'GET' }),
-
-    /** Add a new repair request */
-    add: (payload: Record<string, unknown>) =>
-        request<{ message: string }>('/add_repair', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
-
     /** Add a new repair issue (employee) */
     addIssue: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/add_repairs', {
@@ -391,19 +363,24 @@ export const repairApi = {
             body: JSON.stringify(payload),
         }),
 
-    /** Update repair status */
-    updateStatus: (id: number, payload: Record<string, unknown>) =>
-        request<{ message: string }>(`/edit_repair_status/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(payload),
-        }),
-
-    /** IT Admin Update Repair Status */
-    itadminUpdateRepair: (payload: Record<string, unknown>) =>
-        request<{ message: string }>('/itadmin_update_repair', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        }),
+    // Legacy repair admin/query helpers kept for reference only:
+    // add: (payload: Record<string, unknown>) =>
+    //     request<{ message: string }>('/add_repair', {
+    //         method: 'POST',
+    //         body: JSON.stringify(payload),
+    //     }),
+    // getAll: () =>
+    //     request<Repair[]>('/get_repairs', { method: 'GET' }),
+    // updateStatus: (id: number, payload: Record<string, unknown>) =>
+    //     request<{ message: string }>(`/edit_repair_status/${id}`, {
+    //         method: 'PUT',
+    //         body: JSON.stringify(payload),
+    //     }),
+    // itadminUpdateRepair: (payload: Record<string, unknown>) =>
+    //     request<{ message: string }>('/itadmin_update_repair', {
+    //         method: 'POST',
+    //         body: JSON.stringify(payload),
+    //     }),
 };
 
 // ─── General Requests (Raise Request) APIs ───────────────────────────────────
@@ -432,72 +409,63 @@ export interface GeneralRequest {
     created_at?: string;
 }
 
+/* Legacy request workflow kept for reference only.
 export const requestApi = {
-    /** Get all requests */
     getAll: () =>
         request<GeneralRequest[]>('/manager-approvals', { method: 'GET' }),
 
-    /** Get HR Requests */
     getHrRequests: () =>
         request<GeneralRequest[]>('/get-hr-asset-requests', { method: 'GET' }),
 
-    /** Get Employee specific requests */
     getEmployeeRequests: (userId: number) =>
         request<GeneralRequest[]>(`/employee-asset-requests/${userId}`, { method: 'GET' }),
 
-    /** Create a new request */
     create: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/raise-request', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** Update a request */
     update: (id: number, payload: Record<string, unknown>) =>
         request<{ message: string }>(`/requests/${id}`, {
             method: 'PUT',
             body: JSON.stringify(payload),
         }),
 
-    /** Manager Approval */
     managerApprove: (id: number, payload: { status: string }) =>
         request<{ message: string }>(`/manager-approval/${id}`, {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** Accounts Approval */
     accountsApprove: (id: number, payload: { status: string }) =>
         request<{ message: string }>(`/accounts-approval/${id}`, {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** Employee Raise Request */
     createEmployee: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/raise-asset-request', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** HR Approval */
     hrApprove: (id: number, payload: { status: string }) =>
         request<{ message: string }>(`/hr-approve-request/${id}`, {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** HR Asset Request */
     createHrRequest: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/hr-asset-request', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 
-    /** HR Initiate Exit Process */
     initiateExitProcess: (payload: Record<string, unknown>) =>
         request<{ message: string }>('/initiate-exit', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
 };
+*/

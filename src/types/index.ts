@@ -28,6 +28,8 @@ export interface Asset {
   assignerLocation?: string;
   employeeContactNumber?: string;
   employmentType?: 'Permanent' | 'Contract' | string;
+  assignerName?: string;
+  ownership?: 'Company-Owned' | 'Vendor Asset' | string;
   // Tangible-specific
   serialNumber?: string;
   company?: string;

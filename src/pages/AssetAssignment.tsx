@@ -16,6 +16,11 @@ import { Asset } from '@/types';
 import { productApi, intangibleApi } from '@/services/api';
 import { ColumnFilter, getUniqueValues, SortDir } from '@/components/ColumnFilter';
 
+function isReturnPendingStatus(status?: string) {
+  const normalized = (status || '').trim().toUpperCase().replace(/\s+/g, '_');
+  return normalized === 'RETURN' || normalized === 'RETURNED' || normalized === 'RETURN_REQUESTED';
+}
+
 export default function AssetAssignment() {
   const { user } = useAuth();
   const { assets, isLoading, refreshData } = useData();
@@ -93,7 +98,7 @@ export default function AssetAssignment() {
   const intangibleCount = assignedAssets.filter(a => a.type === 'Intangible').length;
 
   const isItAdmin = user?.role === 'higher_management' || user?.role === 'it_admin';
-  const showActionCol = isItAdmin && filtered.some(a => a.status === 'RETURN' || a.status === 'RETURNED');
+  const showActionCol = isItAdmin && filtered.some(a => isReturnPendingStatus(a.status));
 
   const handleVerifyReturn = async (assetId: string) => {
     setIsReturning(assetId);
@@ -157,7 +162,7 @@ export default function AssetAssignment() {
                 <TableCell><StatusBadge status={asset.status} /></TableCell>
                 {showActionCol && (
                   <TableCell className="text-right">
-                    {(asset.status === 'RETURN' || asset.status === 'RETURNED') ? (
+                    {isReturnPendingStatus(asset.status) ? (
                       <Button size="sm" onClick={() => handleVerifyReturn(asset.id)} disabled={isReturning === asset.id}>
                         {isReturning === asset.id && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                         Return Accepted
@@ -209,7 +214,7 @@ export default function AssetAssignment() {
                 <TableCell><StatusBadge status={asset.status} /></TableCell>
                 {showActionCol && (
                   <TableCell className="text-right">
-                    {(asset.status === 'RETURN' || asset.status === 'RETURNED') ? (
+                    {isReturnPendingStatus(asset.status) ? (
                       <Button size="sm" onClick={() => handleVerifyReturn(asset.id)} disabled={isReturning === asset.id}>
                         {isReturning === asset.id && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                         Return Accepted

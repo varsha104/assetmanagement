@@ -87,13 +87,11 @@ export default function TangibleAssetManagement() {
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
   const [form, setForm] = useState<TangibleFormState>(emptyForm());
   const employeeDetailsDisabled = form.status === 'Available';
-
-  const today = new Date().toISOString().slice(0, 10);
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
 
   const filteredAssets = tangibleAssets.filter((asset) => {
     const matchesSearch =
-      asset.name.toLowerCase().includes(search.toLowerCase()) ||
+      (asset.assignerName || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.assetName || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.serialNumber || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.location || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -111,12 +109,12 @@ export default function TangibleAssetManagement() {
   const openEdit = (asset: Asset) => {
     setEditingId(asset.id);
     setForm({
-      name: asset.name || '',
-      assetName: asset.assetName || '',
+      name: asset.assignerName || '',
+      assetName: asset.name || asset.assetName || '',
       category: normalizeTangibleCategory(asset.category),
       customCategory: isStandardTangibleCategory(asset.category) ? '' : asset.category || '',
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
-      ownership: asset.vendorName || asset.vendor ? 'Vendor Asset' : 'Company-Owned',
+      ownership: (asset.ownership || (asset.vendorName || asset.vendor ? 'Vendor Asset' : 'Company-Owned')) as 'Company-Owned' | 'Vendor Asset',
       assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeContactNumber: asset.employeeContactNumber || '',
@@ -152,17 +150,14 @@ export default function TangibleAssetManagement() {
     setSubmitting(true);
     try {
       const payload = {
-        name: form.name,
+        assignerName: form.name,
         assetName: form.assetName,
         type: 'Tangible' as const,
         category: resolvedCategory,
-        purchaseDate: today,
-        warrantyPeriod: 'N/A',
         status: form.status,
-        approvalStatus: 'Approved' as const,
         assignedTo: form.status === 'Assigned' && form.employeeName ? form.employeeName : undefined,
-        createdBy: user?.id || 'higher_management',
         assignerLocation: form.assignerLocation,
+        ownership: form.ownership,
         employeeName: form.employeeName,
         employeeContactNumber: form.employeeContactNumber,
         employmentType: form.employmentType,
@@ -172,9 +167,6 @@ export default function TangibleAssetManagement() {
         laptopSpecifications: form.laptopSpecifications,
         amount: form.amount ? Number(form.amount) : 0,
         vendorName: form.ownership === 'Vendor Asset' ? form.vendorName : '',
-        vendor: form.ownership === 'Vendor Asset' ? form.vendorName : '',
-        company: form.ownership === 'Company-Owned' ? 'Company-Owned' : '',
-        condition: form.status === 'Assigned' ? 'Used' : 'New',
       };
 
       if (editingId) {
@@ -351,12 +343,11 @@ export default function TangibleAssetManagement() {
                   <tr key={asset.id} className="border-t">
                     <td className="px-4 py-4">
                       <div>
-                        <p className="font-medium text-slate-900">{asset.name || '—'}</p>
-                        <p className="text-xs text-muted-foreground">{asset.id}</p>
+                        <p className="font-medium text-slate-900">{asset.assignerName || '—'}</p>
                       </div>
                     </td>
                     <td className="px-4 py-4">{asset.category || '-'}</td>
-                    <td className="px-4 py-4">{asset.assetName || asset.name || '—'}</td>
+                    <td className="px-4 py-4">{asset.assetName || '—'}</td>
                     <td className="px-4 py-4">
                       <StatusBadge status={asset.status} />
                     </td>
