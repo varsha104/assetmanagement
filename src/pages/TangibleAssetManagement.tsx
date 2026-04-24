@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '@/components/StatusBadges';
-import { Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
+import { CircleEllipsis, Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Asset } from '@/types';
 
@@ -85,6 +85,7 @@ export default function TangibleAssetManagement() {
   const [actionMode, setActionMode] = useState<'repair' | 'replacement' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
+  const [employeeInfoAsset, setEmployeeInfoAsset] = useState<Asset | null>(null);
   const [form, setForm] = useState<TangibleFormState>(emptyForm());
   const employeeDetailsDisabled = form.status === 'Available';
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
@@ -207,6 +208,10 @@ export default function TangibleAssetManagement() {
     setActionAsset(null);
   };
 
+  const closeEmployeeInfoDialog = () => {
+    setEmployeeInfoAsset(null);
+  };
+
   const submitAssetAction = async () => {
     if (!actionAsset || !actionMode) return;
 
@@ -319,9 +324,6 @@ export default function TangibleAssetManagement() {
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset Status</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Location</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Contact No</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Employment Type</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Location</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Ownership</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Vendor Name</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Amount</th>
@@ -334,7 +336,7 @@ export default function TangibleAssetManagement() {
             <tbody>
               {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={13} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No tangible assets found.
                   </td>
                 </tr>
@@ -352,10 +354,21 @@ export default function TangibleAssetManagement() {
                       <StatusBadge status={asset.status} />
                     </td>
                     <td className="px-4 py-4">{asset.assignerLocation || '—'}</td>
-                    <td className="px-4 py-4">{asset.employeeName || asset.assignedTo || '—'}</td>
-                    <td className="px-4 py-4">{asset.employeeContactNumber || '—'}</td>
-                    <td className="px-4 py-4">{asset.employmentType || '—'}</td>
-                    <td className="px-4 py-4">{asset.employeeLocation || '—'}</td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <span>{asset.employeeName || asset.assignedTo || '—'}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-none border-0 p-0 shadow-none hover:bg-transparent focus-visible:ring-0"
+                          onClick={() => setEmployeeInfoAsset(asset)}
+                          aria-label={`View employee info for ${asset.employeeName || asset.assignedTo || 'this asset'}`}
+                        >
+                          <CircleEllipsis className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
                     <td className="px-4 py-4">{asset.vendor ? 'Vendor Asset' : 'Company-Owned'}</td>
                     <td className="px-4 py-4">{asset.vendorName || asset.vendor || '—'}</td>
                     <td className="px-4 py-4">{asset.amount != null ? asset.amount : '—'}</td>
@@ -603,6 +616,38 @@ export default function TangibleAssetManagement() {
             <Button onClick={handleSubmit} disabled={submitting}>
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {editingId ? 'Update Asset' : 'Save Asset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(employeeInfoAsset)} onOpenChange={(open) => (open ? undefined : closeEmployeeInfoDialog())}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Employee Info</DialogTitle>
+            <DialogDescription>
+              Additional employee details for the selected tangible asset.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1">
+              <Label>Emp Contact No</Label>
+              <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeContactNumber || '—'}</p>
+            </div>
+            <div className="space-y-1">
+              <Label>Employment Type</Label>
+              <p className="text-sm text-slate-700">{employeeInfoAsset?.employmentType || '—'}</p>
+            </div>
+            <div className="space-y-1">
+              <Label>Emp Location</Label>
+              <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeLocation || '—'}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEmployeeInfoDialog}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

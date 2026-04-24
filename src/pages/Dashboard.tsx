@@ -48,6 +48,14 @@ function getDeadReason(asset: Asset) {
   return 'Reason not recorded';
 }
 
+function getAssetLabel(asset: Asset) {
+  return asset.type === 'Tangible' ? asset.assetName || asset.name || '-' : asset.name || '-';
+}
+
+function getAssignerLabel(asset: Asset) {
+  return asset.type === 'Tangible' ? asset.assignerName || '-' : asset.name || '-';
+}
+
 export default function Dashboard() {
   const { assets, isLoading } = useData();
   const [assetListOpen, setAssetListOpen] = useState(false);
@@ -113,9 +121,9 @@ export default function Dashboard() {
           ['License Key', selectedCompanyAsset.licenseKey],
         ]
       : [
-          ['Assigner Name', selectedCompanyAsset.name],
+          ['Assigner Name', getAssignerLabel(selectedCompanyAsset)],
           ['Category', selectedCompanyAsset.category],
-          ['Asset Name', selectedCompanyAsset.assetName || selectedCompanyAsset.name],
+          ['Asset Name', getAssetLabel(selectedCompanyAsset)],
           ['Asset Status', selectedCompanyAsset.status],
           ['Assigner Location', selectedCompanyAsset.assignerLocation],
           ['Emp Name', selectedCompanyAsset.employeeName || selectedCompanyAsset.assignedTo],
@@ -396,21 +404,11 @@ export default function Dashboard() {
                     <TableRow key={asset.id} className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm [&>*:not(:first-child)]:hidden">
                       <TableCell className="px-4 py-4">
                         <div className="flex items-center gap-3">
-                          <p className="truncate font-medium text-slate-900">{asset.name || '-'}</p>
+                          <p className="truncate font-medium text-slate-900">{getAssignerLabel(asset)}</p>
                         </div>
-                        {assetListFilter === 'all' ? (
-                          <button
-                            type="button"
-                            onClick={() => openCompanyAssetInfo(asset)}
-                            className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                            aria-label={`View details for ${asset.name || 'asset'}`}
-                          >
-                            <Info className="h-4 w-4" />
-                          </button>
-                        ) : null}
                       </TableCell>
                       <TableCell className="truncate">{asset.category || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.assetName || asset.name || '-'}</TableCell>
+                      <TableCell className="truncate">{getAssetLabel(asset)}</TableCell>
                       <TableCell className="truncate">{asset.employeeName || asset.assignedTo || '-'}</TableCell>
                       <TableCell className="px-4 py-4">
                         <StatusBadge status={asset.status} />
@@ -440,11 +438,11 @@ export default function Dashboard() {
                     <TableRow key={asset.id}>
                       <TableCell>
                         <div>
-                          <p className="font-medium text-slate-900">{asset.name || '-'}</p>
+                          <p className="font-medium text-slate-900">{getAssignerLabel(asset)}</p>
                         </div>
                       </TableCell>
                       <TableCell className="truncate">{asset.category || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.assetName || asset.name || '-'}</TableCell>
+                      <TableCell className="truncate">{getAssetLabel(asset)}</TableCell>
                       <TableCell>
                         <StatusBadge status={asset.status} />
                       </TableCell>
@@ -473,17 +471,17 @@ export default function Dashboard() {
                     <TableRow key={asset.id}>
                       <TableCell>
                         <div>
-                          <p className="font-medium text-slate-900">{asset.name || '-'}</p>
+                          <p className="font-medium text-slate-900">{getAssetLabel(asset)}</p>
                         </div>
                       </TableCell>
-                      <TableCell className="truncate">{''}</TableCell>
+                      <TableCell className="truncate">{getAssignerLabel(asset)}</TableCell>
                       <TableCell className="truncate">{asset.employeeName || asset.assignedTo || '-'}</TableCell>
                       <TableCell>
                         <button
                           type="button"
                           onClick={() => openCompanyAssetInfo(asset)}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                          aria-label={`View details for ${asset.name || 'assigned asset'}`}
+                          aria-label={`View details for ${getAssetLabel(asset)}`}
                         >
                           <Info className="h-4 w-4" />
                         </button>
@@ -517,14 +515,14 @@ export default function Dashboard() {
                     <TableRow key={asset.id} className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm [&>*:not(:first-child)]:hidden">
                       <TableCell className="flex flex-1 items-center p-0">
                         <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-slate-900">{asset.name || '-'}</p>
+                          <p className="truncate font-medium text-slate-900">{getAssetLabel(asset)}</p>
                           <p className="hidden text-xs text-muted-foreground">{asset.id}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => openCompanyAssetInfo(asset)}
                           className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                          aria-label={`View details for ${asset.name || 'vendor asset'}`}
+                          aria-label={`View details for ${getAssetLabel(asset)}`}
                         >
                           <Info className="h-4 w-4" />
                         </button>
@@ -548,13 +546,13 @@ export default function Dashboard() {
                     className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-medium text-slate-900 shadow-sm"
                   >
                     <div className="min-w-0">
-                      <p className="truncate">{asset.name || '-'}</p>
+                      <p className="truncate">{getAssetLabel(asset)}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => openCompanyAssetInfo(asset)}
                       className="ml-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                      aria-label={`View details for ${asset.name || 'company-owned asset'}`}
+                      aria-label={`View details for ${getAssetLabel(asset)}`}
                     >
                       <Info className="h-4 w-4" />
                     </button>
@@ -582,8 +580,8 @@ export default function Dashboard() {
                 <TableBody>
                   {visibleAssets.map((asset) => (
                     <TableRow key={asset.id}>
-                      <TableCell className="truncate font-medium text-slate-900">{asset.assetName || asset.name || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.name || '-'}</TableCell>
+                      <TableCell className="truncate font-medium text-slate-900">{getAssetLabel(asset)}</TableCell>
+                      <TableCell className="truncate">{getAssignerLabel(asset)}</TableCell>
                       <TableCell className="truncate">{asset.employeeName || asset.assignedTo || '-'}</TableCell>
                       <TableCell>
                         <StatusBadge status={asset.status} />
@@ -620,7 +618,7 @@ export default function Dashboard() {
                   <TableRow key={asset.id}>
                     <TableCell>
                       <div>
-                        <p className="truncate font-medium text-slate-900">{asset.name}</p>
+                        <p className="truncate font-medium text-slate-900">{getAssetLabel(asset)}</p>
                         <p className="text-xs text-muted-foreground">{asset.id}</p>
                       </div>
                     </TableCell>
@@ -646,7 +644,7 @@ export default function Dashboard() {
         <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl">
           <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-4">
             <DialogTitle className="text-xl font-semibold text-slate-900">
-              {selectedCompanyAsset?.name || 'Asset Details'}
+              {selectedCompanyAsset ? getAssetLabel(selectedCompanyAsset) : 'Asset Details'}
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-600">
               {selectedCompanyAssetType === 'Intangible'
