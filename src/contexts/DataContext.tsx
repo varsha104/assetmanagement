@@ -150,6 +150,22 @@ function mapIntangibleToAsset(item: IntangibleAsset): Asset {
   };
 }
 
+function getAssetOrderValue(asset: Asset): number {
+  const rawId = asset.type === 'Intangible' ? asset.id.replace('INT-', '') : asset.id;
+  const numericId = Number(rawId);
+
+  if (Number.isFinite(numericId) && numericId > 0) {
+    return numericId;
+  }
+
+  const createdAtValue = Date.parse(asset.createdAt || asset.purchaseDate || '');
+  return Number.isFinite(createdAtValue) ? createdAtValue : 0;
+}
+
+function sortAssetsNewestFirst(items: Asset[]): Asset[] {
+  return [...items].sort((a, b) => getAssetOrderValue(b) - getAssetOrderValue(a));
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 interface UserInfo {
@@ -224,7 +240,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      setAssets([...tangibleAssets, ...intangibleAssets]);
+      setAssets(sortAssetsNewestFirst([...tangibleAssets, ...intangibleAssets]));
 
       if (isDashboardRoute) {
         // Dashboard is the only place that needs the employee directory.
