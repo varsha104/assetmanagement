@@ -15,6 +15,7 @@ import { Asset } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 const CHART_COLORS = ['hsl(217, 91%, 50%)', 'hsl(142, 71%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
+const EMPLOYEE_LOCATIONS = ['Hyderabad', 'Banglore', 'Vijayawada'] as const;
 type AssetListFilter = 'all' | 'company-owned' | 'vendor' | 'available' | 'assigned' | 'dead';
 type EmployeeFormState = {
   name: string;
@@ -441,12 +442,21 @@ export default function Dashboard() {
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="employee-location">Location</Label>
-              <Input
-                id="employee-location"
+              <Select
                 value={employeeForm.location}
-                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, location: e.target.value }))}
-                placeholder="Enter location"
-              />
+                onValueChange={(value) => setEmployeeForm((prev) => ({ ...prev, location: value }))}
+              >
+                <SelectTrigger id="employee-location">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMPLOYEE_LOCATIONS.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
