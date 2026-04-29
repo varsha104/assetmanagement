@@ -28,6 +28,7 @@ export interface Asset {
   assignerLocation?: string;
   employeeContactNumber?: string;
   employmentType?: 'Permanent' | 'Contract' | string;
+  employeeRole?: string;
   assignerName?: string;
   ownership?: 'Company-Owned' | 'Vendor Asset' | string;
   // Tangible-specific

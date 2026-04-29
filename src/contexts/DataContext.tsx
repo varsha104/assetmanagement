@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { Asset, AssetAssignment, Issue, ApprovalRequest, ApprovalStatus, IssueStatus, AssetType, AssetStatus } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
@@ -12,6 +12,8 @@ import {
   Employee,
   Repair,
 } from '@/services/api';
+
+const LOCAL_EMPLOYEE_STORAGE_KEY = 'src_23rasset_local_employees';
 
 // ─── Map backend product to frontend Asset type ────────────────────────────
 
@@ -105,6 +107,7 @@ function mapProductToAsset(product: Product): Asset {
     condition,
     employeeContactNumber: product.employee_contact_number || '',
     employmentType: product.employment_type || '',
+    employeeRole: product.employee_role || product.employeeRole || '',
     assignerName: product.assigner_name || product.created_by || '',
     ownership: product.ownership || (product.vendor_name || product.vendor ? 'Vendor Asset' : 'Company-Owned'),
     // Tangible-specific
@@ -138,6 +141,7 @@ function mapIntangibleToAsset(item: IntangibleAsset): Asset {
     employeeName: item.employee_name || item.assigned_to || '',
     employeeContactNumber: item.employee_contact_number || '',
     employmentType: item.employment_type || '',
+    employeeRole: item.employee_role || item.employeeRole || '',
     employeeLocation: item.employee_location || '',
     // Intangible-specific
     licenseKey: item.license_key || item.licenseKey || '',
@@ -176,6 +180,76 @@ interface UserInfo {
   phoneNumber?: string;
   role: string;
   department: string;
+  location?: string;
+  employmentType?: 'Permanent' | 'Contract' | string;
+  source: 'backend' | 'local';
+}
+
+type EmployeeInput = {
+  name: string;
+  phoneNumber: string;
+  employmentType: 'Permanent' | 'Contract';
+  role: string;
+  location: string;
+};
+
+function loadLocalEmployees(): UserInfo[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_EMPLOYEE_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as Partial<UserInfo>[];
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item): item is Partial<UserInfo> => Boolean(item && item.id && item.name))
+      .map((item) => ({
+        id: String(item.id),
+        username: item.username || '',
+        name: item.name || '',
+        email: item.email || '',
+        phoneNumber: item.phoneNumber || '',
+        role: item.role || '',
+        department: item.department || item.role || 'Employee',
+        location: item.location || '',
+        employmentType: item.employmentType || '',
+        source: 'local' as const,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function persistLocalEmployees(items: UserInfo[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(LOCAL_EMPLOYEE_STORAGE_KEY, JSON.stringify(items));
+}
+
+function mapBackendEmployee(e: Employee): UserInfo {
+  return {
+    id: String(e.id),
+    username: e.username || '',
+    name: e.name || '',
+    email: e.email || '',
+    phoneNumber: e.phone_number || '',
+    role: e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '',
+    department: e.department || '',
+    location: '',
+    employmentType: '',
+    source: 'backend',
+  };
+}
+
+function mergeEmployeeDirectory(backendEmployees: UserInfo[], localEmployees: UserInfo[]) {
+  const merged = [...backendEmployees];
+  for (const employee of localEmployees) {
+    if (!merged.some((item) => item.id === employee.id)) {
+      merged.push(employee);
+    }
+  }
+  return merged;
 }
 
 interface DataContextType {
@@ -186,6 +260,7 @@ interface DataContextType {
   employees: UserInfo[];
   isLoading: boolean;
   refreshData: () => Promise<void>;
+  addEmployee: (employee: EmployeeInput) => Promise<void>;
   addAsset: (asset: Partial<Asset> & { type: AssetType }) => Promise<void>;
   updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
@@ -209,8 +284,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [assignments, setAssignments] = useState<AssetAssignment[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
-  const [employees, setEmployees] = useState<UserInfo[]>([]);
+  const [localEmployees, setLocalEmployees] = useState<UserInfo[]>(() => loadLocalEmployees());
+  const [employees, setEmployees] = useState<UserInfo[]>(() => loadLocalEmployees());
   const [isLoading, setIsLoading] = useState(false);
+  const localEmployeesRef = useRef(localEmployees);
+
+  useEffect(() => {
+    localEmployeesRef.current = localEmployees;
+  }, [localEmployees]);
 
   // ── Fetch all data from backend ──────────────────────────────────────────
 
@@ -243,24 +324,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       setAssets(sortAssetsNewestFirst([...tangibleAssets, ...intangibleAssets]));
 
-      if (isDashboardRoute || isTangibleRoute) {
-        // Dashboard and tangible asset creation both need the employee directory.
+      if (isDashboardRoute || isTangibleRoute || isIntangibleRoute) {
+        // Dashboard and both asset forms need the employee directory.
         const empResult = await employeeApi.getAll();
+        let backendEmployees: UserInfo[] = [];
         if (empResult.ok && empResult.data) {
           const rawEmp = empResult.data as unknown as { employees?: Employee[] };
           const empData = rawEmp.employees || (Array.isArray(empResult.data) ? empResult.data : []);
-          setEmployees(
-            empData.map((e: Employee) => ({
-              id: String(e.id),
-              username: e.username || '',
-              name: e.name || '',
-              email: e.email || '',
-              phoneNumber: e.phone_number || '',
-              role: e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '',
-              department: e.department || '',
-            }))
-          );
+          backendEmployees = empData.map(mapBackendEmployee);
         }
+
+        setEmployees(mergeEmployeeDirectory(backendEmployees, localEmployeesRef.current));
       }
 
       // Legacy dashboard/admin data kept for reference only:
@@ -289,6 +363,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // ── CRUD operations ──────────────────────────────────────────────────────
 
+  const addEmployee = useCallback(async (employee: EmployeeInput) => {
+    const name = employee.name.trim();
+    if (!name) {
+      throw new Error('Employee name is required');
+    }
+
+    const phoneNumber = employee.phoneNumber.trim();
+    const role = employee.role.trim();
+    const location = employee.location.trim();
+    const newEmployee: UserInfo = {
+      id: `local-${Date.now()}`,
+      username: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name,
+      email: '',
+      phoneNumber,
+      role,
+      department: role || 'Employee',
+      location,
+      employmentType: employee.employmentType,
+      source: 'local',
+    };
+
+    setLocalEmployees((prev) => {
+      const next = [...prev, newEmployee];
+      persistLocalEmployees(next);
+      return next;
+    });
+    setEmployees((prev) => mergeEmployeeDirectory(prev, [newEmployee]));
+  }, []);
+
   const addAsset = useCallback(async (asset: Partial<Asset> & { type: AssetType }) => {
     if (asset.type === 'Tangible') {
       const backendStatus = mapFrontendStatusToBackend(asset.status, 'Tangible');
@@ -310,6 +414,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employeeName: asset.employeeName || asset.assignedTo || '',
         employeeContactNumber: asset.employeeContactNumber || '',
         employmentType: asset.employmentType || '',
+        employeeRole: asset.employeeRole || '',
+        employee_role: asset.employeeRole || '',
         employeeLocation: asset.employeeLocation || '',
         ownership: asset.ownership || (asset.vendorName || asset.vendor ? 'Vendor Asset' : 'Company-Owned'),
         vendorName: asset.vendorName || asset.vendor || '',
@@ -340,6 +446,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employeeName: asset.employeeName || asset.assignedTo || '',
         employeeContactNumber: asset.employeeContactNumber || '',
         employmentType: asset.employmentType || '',
+        employeeRole: asset.employeeRole || '',
+        employee_role: asset.employeeRole || '',
         employeeLocation: asset.employeeLocation || '',
         approvalStatus: asset.approvalStatus || 'Approved',
         status: backendStatus,
@@ -366,6 +474,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         vendor: updates.vendor ?? currentAsset?.vendor,
         subscription_type: updates.subscriptionType ?? currentAsset?.subscriptionType,
         license_key: updates.licenseKey ?? currentAsset?.licenseKey,
+        employee_name: updates.employeeName ?? currentAsset?.employeeName ?? '',
+        employee_contact_number: updates.employeeContactNumber ?? currentAsset?.employeeContactNumber ?? '',
+        employment_type: updates.employmentType ?? currentAsset?.employmentType ?? '',
+        employeeRole: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
+        employee_role: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
+        employee_location: updates.employeeLocation ?? currentAsset?.employeeLocation ?? '',
         status: backendStatus,
       };
       setIfPresent(payload, 'validity_start_date', updates.purchaseDate ?? currentAsset?.purchaseDate);
@@ -393,6 +507,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employeeName: updates.employeeName ?? currentAsset?.employeeName ?? '',
         employeeContactNumber: updates.employeeContactNumber ?? currentAsset?.employeeContactNumber ?? '',
         employmentType: updates.employmentType ?? currentAsset?.employmentType ?? '',
+        employeeRole: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
+        employee_role: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
         employeeLocation: updates.employeeLocation ?? currentAsset?.employeeLocation ?? '',
         laptopModelNumber: updates.laptopModelNumber ?? currentAsset?.laptopModelNumber ?? '',
         laptopSpecifications: updates.laptopSpecifications ?? currentAsset?.laptopSpecifications ?? '',
@@ -492,7 +608,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const getAssetById = useCallback((id: string) => assets.find(a => a.id === id), [assets]);
   const getUserById = useCallback((id: string) => employees.find(u => u.id === id), [employees]);
-  const getEmployees = useCallback(() => employees.filter(u => u.role === 'employee' || u.department === 'Employee'), [employees]);
+  const getEmployees = useCallback(() => employees, [employees]);
 
   return (
     <DataContext.Provider
@@ -504,6 +620,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employees,
         isLoading,
         refreshData,
+        addEmployee,
         addAsset,
         updateAsset,
         deleteAsset,

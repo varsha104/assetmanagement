@@ -128,6 +128,8 @@ export interface Product {
     employee_name?: string;
     employee_contact_number?: string;
     employment_type?: string;
+    employee_role?: string;
+    employeeRole?: string;
     employee_location?: string;
     ownership?: string;
     vendor_name?: string;
@@ -224,6 +226,8 @@ export interface IntangibleAsset {
     employee_name?: string;
     employee_contact_number?: string;
     employment_type?: string;
+    employee_role?: string;
+    employeeRole?: string;
     employee_location?: string;
     amount_paid?: number;
 }

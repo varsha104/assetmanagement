@@ -92,6 +92,7 @@ type TangibleFormState = {
   employeeName: string;
   employeeContactNumber: string;
   employmentType: 'Permanent' | 'Contract';
+  employeeRole: string;
   employeeLocation: string;
   serialNumber: string;
   laptopModelNumber: string;
@@ -112,6 +113,7 @@ const emptyForm = (): TangibleFormState => ({
   employeeName: '',
   employeeContactNumber: '',
   employmentType: 'Permanent',
+  employeeRole: '',
   employeeLocation: '',
   serialNumber: '',
   laptopModelNumber: '',
@@ -204,7 +206,8 @@ export default function TangibleAssetManagement() {
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
       employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
-      employeeLocation: asset.employeeLocation || '',
+      employeeRole: asset.employeeRole || matchedEmployee?.role || '',
+      employeeLocation: matchedEmployee?.location || asset.employeeLocation || '',
       serialNumber: asset.serialNumber || '',
       laptopModelNumber: asset.laptopModelNumber || '',
       laptopSpecifications: asset.laptopSpecifications || '',
@@ -246,6 +249,7 @@ export default function TangibleAssetManagement() {
         employeeName: form.employeeName,
         employeeContactNumber: form.employeeContactNumber,
         employmentType: form.employmentType,
+        employeeRole: form.employeeRole,
         employeeLocation: form.employeeLocation,
         serialNumber: form.serialNumber,
         laptopModelNumber: form.laptopModelNumber,
@@ -709,6 +713,9 @@ export default function TangibleAssetManagement() {
                       employeeId: value,
                       employeeName: selectedEmployee?.name || '',
                       employeeContactNumber: selectedEmployee?.phoneNumber || '',
+                      employmentType: (selectedEmployee?.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
+                      employeeRole: selectedEmployee?.role || '',
+                      employeeLocation: selectedEmployee?.location || '',
                     }));
                   }}
                   disabled={employeeDetailsDisabled}
@@ -747,25 +754,23 @@ export default function TangibleAssetManagement() {
                     <SelectItem value="Contract">Contract</SelectItem>
                   </SelectContent>
                 </Select>
-            </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Input
+                  value={form.employeeRole}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeRole: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                />
+              </div>
               <div className="space-y-2">
                 <Label>Employee Location</Label>
-                <Select
+                <Input
                   value={form.employeeLocation}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, employeeLocation: value }))}
-                >
-                  <SelectTrigger disabled={employeeDetailsDisabled}>
-                    <SelectValue placeholder="Select location" />
-                  </SelectTrigger>
-                <SelectContent>
-                  {ASSIGNER_LOCATIONS.map((location) => (
-                    <SelectItem key={location} value={location}>
-                      {location}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeLocation: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                />
+              </div>
               <div className="space-y-2">
                 <Label>Ownership</Label>
                 <Select
@@ -848,6 +853,10 @@ export default function TangibleAssetManagement() {
             <div className="space-y-1">
               <Label>Emp Contact No</Label>
               <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeContactNumber || '—'}</p>
+            </div>
+            <div className="space-y-1">
+              <Label>Role</Label>
+              <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeRole || '—'}</p>
             </div>
             <div className="space-y-1">
               <Label>Employment Type</Label>

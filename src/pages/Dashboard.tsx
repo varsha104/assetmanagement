@@ -1,16 +1,35 @@
 ﻿import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useData } from '@/contexts/DataContext';
 import { StatusBadge } from '@/components/StatusBadges';
-import { Info, Package, Building2, CheckCircle, Clock, Loader2, Wrench, CircleAlert } from 'lucide-react';
+import { Info, Package, Building2, CheckCircle, Clock, Loader2, Wrench, CircleAlert, Plus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Asset } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 const CHART_COLORS = ['hsl(217, 91%, 50%)', 'hsl(142, 71%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
 type AssetListFilter = 'all' | 'company-owned' | 'vendor' | 'available' | 'assigned' | 'dead';
+type EmployeeFormState = {
+  name: string;
+  contactNumber: string;
+  employmentType: 'Permanent' | 'Contract';
+  role: string;
+  location: string;
+};
+const emptyEmployeeForm = (): EmployeeFormState => ({
+  name: '',
+  contactNumber: '',
+  employmentType: 'Permanent',
+  role: '',
+  location: '',
+});
 const DEAD_STATUS_KEYS = new Set([
   'DEAD',
   'DAMAGED',
@@ -57,7 +76,8 @@ function getAssignerLabel(asset: Asset) {
 }
 
 export default function Dashboard() {
-  const { assets, isLoading } = useData();
+  const { assets, employees, addEmployee, isLoading } = useData();
+  const { toast } = useToast();
   const [assetListOpen, setAssetListOpen] = useState(false);
   const [assetListFilter, setAssetListFilter] = useState<AssetListFilter>('all');
   const [selectedCompanyAsset, setSelectedCompanyAsset] = useState<Asset | null>(null);
@@ -65,6 +85,9 @@ export default function Dashboard() {
   const [totalAssetsView, setTotalAssetsView] = useState<'Tangible' | 'Intangible'>('Tangible');
   const [availableAssetsView, setAvailableAssetsView] = useState<'Tangible' | 'Intangible'>('Tangible');
   const [assignedAssetsView, setAssignedAssetsView] = useState<'Tangible' | 'Intangible'>('Tangible');
+  const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
+  const [employeeSubmitting, setEmployeeSubmitting] = useState(false);
+  const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(emptyEmployeeForm());
 
   if (isLoading) {
     return (
@@ -110,6 +133,7 @@ export default function Dashboard() {
           ['Assigner Location', selectedCompanyAsset.assignerLocation],
           ['Employee Name', selectedCompanyAsset.employeeName || selectedCompanyAsset.assignedTo],
           ['Employee Contact Number', selectedCompanyAsset.employeeContactNumber],
+          ['Role', selectedCompanyAsset.employeeRole],
           ['Employment Type', selectedCompanyAsset.employmentType],
           ['Employee Location', selectedCompanyAsset.employeeLocation],
           ['Subscription Type', selectedCompanyAsset.subscriptionType],
@@ -128,6 +152,7 @@ export default function Dashboard() {
           ['Assigner Location', selectedCompanyAsset.assignerLocation],
           ['Emp Name', selectedCompanyAsset.employeeName || selectedCompanyAsset.assignedTo],
           ['Emp Contact No', selectedCompanyAsset.employeeContactNumber],
+          ['Role', selectedCompanyAsset.employeeRole],
           ['Employment Type', selectedCompanyAsset.employmentType],
           ['Emp Location', selectedCompanyAsset.employeeLocation],
           ['Ownership', selectedCompanyAsset.company ? 'Company-Owned' : selectedCompanyAsset.vendor ? 'Vendor Asset' : '-'],
@@ -206,6 +231,49 @@ export default function Dashboard() {
     setSelectedCompanyAsset(null);
   };
 
+  const openEmployeeDialog = () => {
+    setEmployeeForm(emptyEmployeeForm());
+    setEmployeeDialogOpen(true);
+  };
+
+  const closeEmployeeDialog = () => {
+    setEmployeeDialogOpen(false);
+    setEmployeeSubmitting(false);
+    setEmployeeForm(emptyEmployeeForm());
+  };
+
+  const handleEmployeeSubmit = async () => {
+    if (!employeeForm.name.trim() || !employeeForm.contactNumber.trim() || !employeeForm.role.trim() || !employeeForm.location.trim()) {
+      toast({
+        title: 'Missing fields',
+        description: 'Please enter employee name, contact number, role, and location.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setEmployeeSubmitting(true);
+    try {
+      await addEmployee({
+        name: employeeForm.name,
+        phoneNumber: employeeForm.contactNumber,
+        employmentType: employeeForm.employmentType,
+        role: employeeForm.role,
+        location: employeeForm.location,
+      });
+      toast({ title: 'Employee added' });
+      closeEmployeeDialog();
+    } catch (error) {
+      toast({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Unable to save employee.',
+        variant: 'destructive',
+      });
+    } finally {
+      setEmployeeSubmitting(false);
+    }
+  };
+
   const assetListMeta: Record<AssetListFilter, { title: string; description: string; assets: Asset[] }> = {
     all: {
       title: 'Total Assets',
@@ -269,7 +337,19 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col gap-6 overflow-y-auto pr-1 pb-6 scrollbar-hide">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage assets and keep the employee directory in sync from one place.
+          </p>
+        </div>
+        <Button onClick={openEmployeeDialog} className="gap-2 self-start sm:self-auto">
+          <Plus className="h-4 w-4" />
+          New Employee
+          <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs">{employees.length}</span>
+        </Button>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {summaryCards.map((card) => (
@@ -307,6 +387,78 @@ export default function Dashboard() {
           )
         ))}
       </div>
+
+      <Dialog open={employeeDialogOpen} onOpenChange={(open) => (open ? setEmployeeDialogOpen(true) : closeEmployeeDialog())}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>New Employee</DialogTitle>
+            <DialogDescription>Capture the employee details used across both asset forms.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="employee-name">Employee Name</Label>
+              <Input
+                id="employee-name"
+                value={employeeForm.name}
+                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Enter employee name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-contact">Contact Number</Label>
+              <Input
+                id="employee-contact"
+                value={employeeForm.contactNumber}
+                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, contactNumber: e.target.value }))}
+                placeholder="Enter contact number"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Employment Type</Label>
+              <Select
+                value={employeeForm.employmentType}
+                onValueChange={(value) =>
+                  setEmployeeForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Permanent">Permanent</SelectItem>
+                  <SelectItem value="Contract">Contract</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-role">Role</Label>
+              <Input
+                id="employee-role"
+                value={employeeForm.role}
+                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, role: e.target.value }))}
+                placeholder="Enter role"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="employee-location">Location</Label>
+              <Input
+                id="employee-location"
+                value={employeeForm.location}
+                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, location: e.target.value }))}
+                placeholder="Enter location"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEmployeeDialog} disabled={employeeSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleEmployeeSubmit} disabled={employeeSubmitting}>
+              {employeeSubmitting ? 'Saving...' : 'Save Employee'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={assetListOpen}
