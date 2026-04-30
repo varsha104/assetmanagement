@@ -14,6 +14,8 @@ import {
 } from '@/services/api';
 
 const LOCAL_EMPLOYEE_STORAGE_KEY = 'src_23rasset_local_employees';
+const LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY = 'src_23rasset_deleted_intangible_asset_ids';
+const LOCAL_TANGIBLE_ASSET_OVERRIDES_KEY = 'src_23rasset_tangible_asset_overrides';
 
 // ─── Map backend product to frontend Asset type ────────────────────────────
 
@@ -251,6 +253,47 @@ function persistLocalEmployees(items: UserInfo[]) {
   window.localStorage.setItem(LOCAL_EMPLOYEE_STORAGE_KEY, JSON.stringify(items));
 }
 
+function loadDeletedIntangibleAssetIds(): string[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistDeletedIntangibleAssetId(id: string) {
+  if (typeof window === 'undefined') return;
+
+  const next = Array.from(new Set([...loadDeletedIntangibleAssetIds(), id]));
+  window.localStorage.setItem(LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
+}
+
+type TangibleAssetOverride = Pick<Partial<Asset>, 'ownership' | 'vendor' | 'vendorName' | 'amount' | 'company'>;
+
+function loadTangibleAssetOverrides(): Record<string, TangibleAssetOverride> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_TANGIBLE_ASSET_OVERRIDES_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistTangibleAssetOverride(id: string, override: TangibleAssetOverride) {
+  if (typeof window === 'undefined') return;
+
+  const overrides = loadTangibleAssetOverrides();
+  overrides[id] = { ...overrides[id], ...override };
+  window.localStorage.setItem(LOCAL_TANGIBLE_ASSET_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
 function mapBackendEmployee(e: Employee): UserInfo {
   const role = e.role || (e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '');
 
@@ -269,9 +312,9 @@ function mapBackendEmployee(e: Employee): UserInfo {
 }
 
 function mergeEmployeeDirectory(backendEmployees: UserInfo[], localEmployees: UserInfo[]) {
-  const merged = [...backendEmployees];
-  for (const employee of localEmployees) {
-    if (!merged.some((item) => item.id === employee.id)) {
+  const merged = [...localEmployees];
+  for (const employee of backendEmployees) {
+    if (!merged.some((item) => item.id === employee.id || item.phoneNumber === employee.phoneNumber)) {
       merged.push(employee);
     }
   }
@@ -335,7 +378,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const productsResult = await productApi.getAll();
         if (productsResult.ok && productsResult.data) {
           const products = productsResult.data.products || [];
-          tangibleAssets = products.map(mapProductToAsset);
+          const tangibleOverrides = loadTangibleAssetOverrides();
+          tangibleAssets = products.map(mapProductToAsset).map((asset) => ({
+            ...asset,
+            ...tangibleOverrides[asset.id],
+          }));
         }
       }
 
@@ -344,7 +391,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (intangibleResult.ok && intangibleResult.data) {
           const rawData = intangibleResult.data as unknown as { intangible_assets?: IntangibleAsset[] };
           const items = rawData.intangible_assets || (Array.isArray(intangibleResult.data) ? intangibleResult.data : []);
-          intangibleAssets = items.map(mapIntangibleToAsset);
+          const deletedIntangibleIds = new Set(loadDeletedIntangibleAssetIds());
+          intangibleAssets = items
+            .map(mapIntangibleToAsset)
+            .filter((asset) => !deletedIntangibleIds.has(asset.id));
         }
       }
 
@@ -429,6 +479,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     if (result.ok && result.data) {
       await refreshData();
+      setEmployees((prev) => {
+        const withoutSavedEmployee = prev.filter(
+          (item) => item.id !== savedEmployee.id && item.phoneNumber !== savedEmployee.phoneNumber,
+        );
+        return [savedEmployee, ...withoutSavedEmployee];
+      });
       return;
     }
 
@@ -562,7 +618,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         assetName: updates.assetName ?? currentAsset?.assetName ?? currentAsset?.name ?? '',
         type: currentAsset?.type ?? 'Tangible',
         category: updates.category ?? currentAsset?.category ?? '',
-        company: updates.company ?? currentAsset?.company ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? '',
+        company:
+          updates.ownership === 'Vendor Asset'
+            ? updates.vendorName ?? updates.vendor ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? ''
+            : updates.company ?? currentAsset?.company ?? '',
         warrantyPeriod: updates.warrantyPeriod ?? currentAsset?.warrantyPeriod ?? '',
         condition: updates.condition ?? currentAsset?.condition ?? '',
         serialNumber: updates.serialNumber ?? currentAsset?.serialNumber ?? '',
@@ -578,11 +637,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employeeLocation: updates.employeeLocation ?? currentAsset?.employeeLocation ?? '',
         laptopModelNumber: updates.laptopModelNumber ?? currentAsset?.laptopModelNumber ?? '',
         laptopSpecifications: updates.laptopSpecifications ?? currentAsset?.laptopSpecifications ?? '',
+        ownership: updates.ownership ?? currentAsset?.ownership ?? (currentAsset?.vendorName || currentAsset?.vendor ? 'Vendor Asset' : 'Company-Owned'),
+        vendorName:
+          (updates.ownership ?? currentAsset?.ownership) === 'Vendor Asset'
+            ? updates.vendorName ?? updates.vendor ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? ''
+            : '',
+        vendor:
+          (updates.ownership ?? currentAsset?.ownership) === 'Vendor Asset'
+            ? updates.vendorName ?? updates.vendor ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? ''
+            : '',
+        amount: updates.amount ?? currentAsset?.amount ?? 0,
       };
       setIfPresent(payload, 'purchaseDate', updates.purchaseDate ?? currentAsset?.purchaseDate);
 
       const assignedTo = updates.assignedTo ?? currentAsset?.assignedTo;
-      if (assignedTo) {
+      if (assignedTo && /^\d+$/.test(String(assignedTo))) {
         payload.assignedTo = assignedTo;
       }
 
@@ -592,6 +661,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       const result = await productApi.update(numericId, payload);
       if (!result.ok) throw new Error(result.error || 'Failed to update tangible asset');
+
+      const nextOwnership =
+        updates.ownership ?? currentAsset?.ownership ?? (currentAsset?.vendorName || currentAsset?.vendor ? 'Vendor Asset' : 'Company-Owned');
+      const nextVendorName =
+        nextOwnership === 'Vendor Asset'
+          ? updates.vendorName ?? updates.vendor ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? ''
+          : '';
+
+      persistTangibleAssetOverride(id, {
+        ownership: nextOwnership,
+        vendorName: nextVendorName,
+        vendor: nextVendorName,
+        amount: updates.amount ?? currentAsset?.amount ?? 0,
+        company: nextOwnership === 'Vendor Asset' ? nextVendorName : updates.company ?? currentAsset?.company ?? '',
+      });
     }
     await refreshData();
   }, [assets, refreshData]);
@@ -607,8 +691,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Intangible delete endpoint is not wired yet, so keep the existing local fallback there.
-    setAssets(prev => prev.filter(a => a.id !== id));
+    if (currentAsset?.type === 'Intangible') {
+      persistDeletedIntangibleAssetId(id);
+      setAssets(prev => prev.filter(a => a.id !== id));
+      await refreshData();
+      return;
+    }
   }, [assets, refreshData]);
 
   const addAssignment = useCallback(async (assignment: Omit<AssetAssignment, 'id' | 'approvalStatus'>) => {

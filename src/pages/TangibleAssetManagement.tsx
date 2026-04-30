@@ -51,7 +51,7 @@ const TANGIBLE_FILTER_KEYS: TangibleFilterKey[] = [
   'specifications',
 ];
 
-const getOwnershipLabel = (asset: Asset) => (asset.vendor ? 'Vendor Asset' : 'Company-Owned');
+const getOwnershipLabel = (asset: Asset) => asset.ownership || (asset.vendor || asset.vendorName ? 'Vendor Asset' : 'Company-Owned');
 
 const tangibleFilterAccessors: Record<TangibleFilterKey, (asset: Asset) => string> = {
   assignerName: (asset) => asset.assignerName || '—',
@@ -584,7 +584,7 @@ export default function TangibleAssetManagement() {
                         </Button>
                       </div>
                     </td>
-                    <td className="px-4 py-4">{asset.vendor ? 'Vendor Asset' : 'Company-Owned'}</td>
+                    <td className="px-4 py-4">{getOwnershipLabel(asset)}</td>
                     <td className="px-4 py-4">{asset.vendorName || asset.vendor || '—'}</td>
                     <td className="px-4 py-4">{asset.amount != null ? asset.amount : '—'}</td>
                     <td className="px-4 py-4">{asset.serialNumber || '—'}</td>
