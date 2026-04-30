@@ -277,16 +277,33 @@ export const intangibleApi = {
 export interface Employee {
     id: number;
     name: string;
-    email: string;
-    username: string;
-    department: string;
+    email?: string;
+    username?: string;
+    department?: string;
     phone_number?: string;
+    phoneNumber?: string;
+    employment_type?: string;
+    employmentType?: string;
+    role?: string;
+    location?: string;
 }
 
 export const employeeApi = {
     /** Get all employees */
     getAll: () =>
         request<Employee[]>('/employees', { method: 'GET' }),
+
+    add: (payload: {
+        name: string;
+        phoneNumber: string;
+        employmentType: string;
+        role: string;
+        location: string;
+    }) =>
+        request<{ message: string; id: number }>('/add_employee', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
 
     // Legacy employee helpers kept for reference only:
     // getEmployeeAssets: (employeeId: number) =>

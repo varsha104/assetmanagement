@@ -228,11 +228,25 @@ export default function TangibleAssetManagement() {
 
   const handleSubmit = async () => {
     const resolvedCategory = form.category === 'Other' ? form.customCategory.trim() : form.category;
+    const serialNumber = form.serialNumber.trim();
 
-    if (!form.name || !form.assetName || !resolvedCategory || !form.serialNumber) {
+    if (!form.name.trim() || !form.assetName.trim() || !resolvedCategory || !serialNumber) {
       toast({
         title: 'Missing fields',
         description: 'Please enter assigner name, category, asset name, and serial number.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const duplicateSerialAsset = tangibleAssets.find(
+      (asset) => asset.id !== editingId && asset.serialNumber?.trim().toLowerCase() === serialNumber.toLowerCase(),
+    );
+
+    if (duplicateSerialAsset) {
+      toast({
+        title: 'Serial number already exists',
+        description: `Serial number "${serialNumber}" is already used by ${duplicateSerialAsset.assetName || duplicateSerialAsset.name || 'another asset'}.`,
         variant: 'destructive',
       });
       return;
@@ -242,7 +256,7 @@ export default function TangibleAssetManagement() {
     try {
       const payload = {
         assignerName: form.name,
-        assetName: form.assetName,
+        assetName: form.assetName.trim(),
         type: 'Tangible' as const,
         category: resolvedCategory,
         status: form.status,
@@ -254,7 +268,7 @@ export default function TangibleAssetManagement() {
         employmentType: form.status === 'Assigned' ? form.employmentType : '',
         employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
         employeeLocation: form.status === 'Assigned' ? form.employeeLocation : '',
-        serialNumber: form.serialNumber,
+        serialNumber,
         laptopModelNumber: form.laptopModelNumber,
         laptopSpecifications: form.laptopSpecifications,
         amount: form.amount ? Number(form.amount) : 0,

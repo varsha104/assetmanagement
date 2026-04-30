@@ -84,6 +84,20 @@ function setIfPresent(payload: Record<string, unknown>, key: string, value: unkn
   payload[key] = value;
 }
 
+function getFriendlyAssetError(error: string | null, fallback: string) {
+  const message = error || fallback;
+  const duplicateSerialMatch = message.match(/Key \(serial_number\)=\(([^)]+)\) already exists/i);
+
+  if (message.includes('products_serial_number_key') || duplicateSerialMatch) {
+    const serialNumber = duplicateSerialMatch?.[1];
+    return serialNumber
+      ? `An asset with serial number "${serialNumber}" already exists. Please use a unique serial number.`
+      : 'An asset with this serial number already exists. Please use a unique serial number.';
+  }
+
+  return message.length > 240 ? fallback : message;
+}
+
 function mapProductToAsset(product: Product): Asset {
   const productName =
     product.product_name ||
@@ -238,16 +252,18 @@ function persistLocalEmployees(items: UserInfo[]) {
 }
 
 function mapBackendEmployee(e: Employee): UserInfo {
+  const role = e.role || (e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '');
+
   return {
     id: String(e.id),
     username: e.username || '',
     name: e.name || '',
     email: e.email || '',
-    phoneNumber: e.phone_number || '',
-    role: e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '',
-    department: e.department || '',
-    location: '',
-    employmentType: '',
+    phoneNumber: e.phone_number || e.phoneNumber || '',
+    role,
+    department: e.department || role || 'Employee',
+    location: e.location || '',
+    employmentType: e.employment_type || e.employmentType || '',
     source: 'backend',
   };
 }
@@ -382,8 +398,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const phoneNumber = employee.phoneNumber.trim();
     const role = employee.role.trim();
     const location = employee.location.trim();
-    const newEmployee: UserInfo = {
-      id: `local-${Date.now()}`,
+    const result = await employeeApi.add({
+      name,
+      phoneNumber,
+      employmentType: employee.employmentType,
+      role,
+      location,
+    });
+
+    const savedEmployee: UserInfo = {
+      id: result.ok && result.data ? String(result.data.id) : `local-${Date.now()}`,
       username: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       name,
       email: '',
@@ -392,16 +416,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       department: role || 'Employee',
       location,
       employmentType: employee.employmentType,
-      source: 'local',
+      source: result.ok && result.data ? 'backend' : 'local',
     };
 
     setLocalEmployees((prev) => {
-      const next = [...prev, newEmployee];
+      const next = prev.filter((item) => item.id !== savedEmployee.id && item.phoneNumber !== savedEmployee.phoneNumber);
+      next.unshift(savedEmployee);
       persistLocalEmployees(next);
       return next;
     });
-    setEmployees((prev) => mergeEmployeeDirectory(prev, [newEmployee]));
-  }, []);
+    setEmployees((prev) => mergeEmployeeDirectory([savedEmployee, ...prev], localEmployeesRef.current));
+
+    if (result.ok && result.data) {
+      await refreshData();
+      return;
+    }
+
+    console.warn('Falling back to local employee save:', result.error || 'backend route unavailable');
+  }, [refreshData]);
 
   const addAsset = useCallback(async (asset: Partial<Asset> & { type: AssetType }) => {
     if (asset.type === 'Tangible') {
@@ -433,9 +465,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         laptopSpecifications: asset.laptopSpecifications || '',
         amount: asset.amount || 0,
       });
-      if (result.ok) {
-        await refreshData();
+      if (!result.ok) {
+        throw new Error(getFriendlyAssetError(result.error, 'Failed to add tangible asset'));
       }
+
+      await refreshData();
     } else {
       const backendStatus = mapFrontendStatusToBackend(asset.status, 'Intangible');
       const payload: Record<string, unknown> = {
@@ -480,9 +514,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setIfPresent(payload, 'licenseKey', asset.licenseKey);
 
       const result = await intangibleApi.add(payload);
-      if (result.ok) {
-        await refreshData();
+      if (!result.ok) {
+        throw new Error(getFriendlyAssetError(result.error, 'Failed to add intangible asset'));
       }
+
+      await refreshData();
     }
   }, [refreshData]);
 
