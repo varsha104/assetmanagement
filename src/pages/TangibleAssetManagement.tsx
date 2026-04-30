@@ -91,7 +91,7 @@ type TangibleFormState = {
   employeeId: string;
   employeeName: string;
   employeeContactNumber: string;
-  employmentType: 'Permanent' | 'Contract';
+  employmentType: '' | 'Permanent' | 'Contract';
   employeeRole: string;
   employeeLocation: string;
   serialNumber: string;
@@ -112,7 +112,7 @@ const emptyForm = (): TangibleFormState => ({
   employeeId: '',
   employeeName: '',
   employeeContactNumber: '',
-  employmentType: 'Permanent',
+  employmentType: '',
   employeeRole: '',
   employeeLocation: '',
   serialNumber: '',
@@ -205,7 +205,10 @@ export default function TangibleAssetManagement() {
       employeeId: matchedEmployee?.id || '',
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
-      employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
+      employmentType:
+        asset.status === 'Assigned' && asset.employmentType
+          ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
+          : '',
       employeeRole: asset.employeeRole || matchedEmployee?.role || '',
       employeeLocation: matchedEmployee?.location || asset.employeeLocation || '',
       serialNumber: asset.serialNumber || '',
@@ -246,11 +249,11 @@ export default function TangibleAssetManagement() {
         assignedTo: form.status === 'Assigned' && form.employeeId ? form.employeeId : undefined,
         assignerLocation: form.assignerLocation,
         ownership: form.ownership,
-        employeeName: form.employeeName,
-        employeeContactNumber: form.employeeContactNumber,
-        employmentType: form.employmentType,
-        employeeRole: form.employeeRole,
-        employeeLocation: form.employeeLocation,
+        employeeName: form.status === 'Assigned' ? form.employeeName : '',
+        employeeContactNumber: form.status === 'Assigned' ? form.employeeContactNumber : '',
+        employmentType: form.status === 'Assigned' ? form.employmentType : '',
+        employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
+        employeeLocation: form.status === 'Assigned' ? form.employeeLocation : '',
         serialNumber: form.serialNumber,
         laptopModelNumber: form.laptopModelNumber,
         laptopSpecifications: form.laptopSpecifications,
@@ -675,7 +678,21 @@ export default function TangibleAssetManagement() {
             </div>
             <div className="space-y-2">
               <Label>Asset Status</Label>
-              <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as 'Available' | 'Assigned' }))}>
+              <Select
+                value={form.status}
+                onValueChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    status: value as 'Available' | 'Assigned',
+                    employeeId: value === 'Assigned' ? prev.employeeId : '',
+                    employeeName: value === 'Assigned' ? prev.employeeName : '',
+                    employeeContactNumber: value === 'Assigned' ? prev.employeeContactNumber : '',
+                    employmentType: value === 'Assigned' ? prev.employmentType : '',
+                    employeeRole: value === 'Assigned' ? prev.employeeRole : '',
+                    employeeLocation: value === 'Assigned' ? prev.employeeLocation : '',
+                  }))
+                }
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Available">Available</SelectItem>
@@ -743,11 +760,12 @@ export default function TangibleAssetManagement() {
               <div className="space-y-2">
                 <Label>Employment Type</Label>
                 <Select
-                  value={form.employmentType}
+                  value={form.employmentType || undefined}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}
+                  disabled={employeeDetailsDisabled}
                 >
                   <SelectTrigger disabled={employeeDetailsDisabled}>
-                    <SelectValue />
+                    <SelectValue placeholder="Select employment type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Permanent">Permanent</SelectItem>

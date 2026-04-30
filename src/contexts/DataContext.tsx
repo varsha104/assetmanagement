@@ -85,7 +85,17 @@ function setIfPresent(payload: Record<string, unknown>, key: string, value: unkn
 }
 
 function mapProductToAsset(product: Product): Asset {
-  const productName = product.product_name || product.asset_name || product.assetName || product.name || '';
+  const productName =
+    product.product_name ||
+    product.productName ||
+    product.ProductName ||
+    product.Product_name ||
+    product.asset_name ||
+    product.assetName ||
+    product.AssetName ||
+    product.Asset_name ||
+    product.name ||
+    '';
   const company = product.company || product.vendor_name || product.vendor || '';
   const purchaseDate = product.purchase_date || '';
   const condition = product.condition || '';
@@ -428,31 +438,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     } else {
       const backendStatus = mapFrontendStatusToBackend(asset.status, 'Intangible');
-      const result = await intangibleApi.add({
+      const payload: Record<string, unknown> = {
         name: asset.name,
         assignedTo: asset.assignedTo || asset.employeeName || '',
+        assigned_to: asset.assignedTo || asset.employeeName || '',
         type: asset.type,
         category: asset.category,
         purchaseDate: asset.purchaseDate,
+        purchase_date: asset.purchaseDate,
         warrantyPeriod: asset.warrantyPeriod,
+        warranty_period: asset.warrantyPeriod,
         validityStartDate: asset.validityStartDate || asset.purchaseDate,
+        validity_start_date: asset.validityStartDate || asset.purchaseDate,
         validityEndDate: asset.validityEndDate || asset.warrantyPeriod,
+        validity_end_date: asset.validityEndDate || asset.warrantyPeriod,
         renewalDate: asset.renewalDate || '',
+        renewal_date: asset.renewalDate || '',
         vendor: asset.vendor,
         subscriptionType: asset.subscriptionType,
-        licenseKey: asset.licenseKey,
+        subscription_type: asset.subscriptionType,
         createdBy: asset.createdBy || '',
+        created_by: asset.createdBy || '',
         assignerLocation: asset.assignerLocation || '',
+        assigner_location: asset.assignerLocation || '',
         employeeName: asset.employeeName || asset.assignedTo || '',
+        employee_name: asset.employeeName || asset.assignedTo || '',
         employeeContactNumber: asset.employeeContactNumber || '',
+        employee_contact_number: asset.employeeContactNumber || '',
         employmentType: asset.employmentType || '',
+        employment_type: asset.employmentType || '',
         employeeRole: asset.employeeRole || '',
         employee_role: asset.employeeRole || '',
         employeeLocation: asset.employeeLocation || '',
+        employee_location: asset.employeeLocation || '',
         approvalStatus: asset.approvalStatus || 'Approved',
+        approval_status: asset.approvalStatus || 'Approved',
         status: backendStatus,
         amountPaid: asset.amountPaid || asset.amount || 0,
-      });
+        amount_paid: asset.amountPaid || asset.amount || 0,
+      };
+      setIfPresent(payload, 'licenseKey', asset.licenseKey);
+
+      const result = await intangibleApi.add(payload);
       if (result.ok) {
         await refreshData();
       }
@@ -473,7 +500,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         category: updates.category ?? currentAsset?.category,
         vendor: updates.vendor ?? currentAsset?.vendor,
         subscription_type: updates.subscriptionType ?? currentAsset?.subscriptionType,
-        license_key: updates.licenseKey ?? currentAsset?.licenseKey,
+        renewal_date: updates.renewalDate ?? currentAsset?.renewalDate ?? '',
+        amount_paid: updates.amountPaid ?? currentAsset?.amountPaid ?? currentAsset?.amount ?? 0,
+        assigner_location: updates.assignerLocation ?? currentAsset?.assignerLocation ?? '',
         employee_name: updates.employeeName ?? currentAsset?.employeeName ?? '',
         employee_contact_number: updates.employeeContactNumber ?? currentAsset?.employeeContactNumber ?? '',
         employment_type: updates.employmentType ?? currentAsset?.employmentType ?? '',
@@ -482,6 +511,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employee_location: updates.employeeLocation ?? currentAsset?.employeeLocation ?? '',
         status: backendStatus,
       };
+      setIfPresent(payload, 'license_key', updates.licenseKey ?? currentAsset?.licenseKey);
       setIfPresent(payload, 'validity_start_date', updates.purchaseDate ?? currentAsset?.purchaseDate);
       setIfPresent(payload, 'validity_end_date', updates.warrantyPeriod ?? currentAsset?.warrantyPeriod);
 

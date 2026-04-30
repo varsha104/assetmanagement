@@ -114,10 +114,14 @@ export interface Product {
     id: number;
     product_name?: string;
     productName?: string;
+    ProductName?: string;
+    Product_name?: string;
     assigner_name?: string;
     name?: string;
     asset_name?: string;
     assetName?: string;
+    AssetName?: string;
+    Asset_name?: string;
     category?: string;
     status: string;
     approval_status?: string;

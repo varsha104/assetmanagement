@@ -34,7 +34,7 @@ type IntangibleFormState = {
   employeeId: string;
   employeeName: string;
   employeeContactNumber: string;
-  employmentType: 'Permanent' | 'Contract';
+  employmentType: '' | 'Permanent' | 'Contract';
   employeeRole: string;
   employeeLocation: string;
   subscriptionType: string;
@@ -53,7 +53,7 @@ const emptyForm = (): IntangibleFormState => ({
   employeeId: '',
   employeeName: '',
   employeeContactNumber: '',
-  employmentType: 'Permanent',
+  employmentType: '',
   employeeRole: '',
   employeeLocation: '',
   subscriptionType: '',
@@ -109,7 +109,10 @@ export default function IntangibleAssetManagement() {
       employeeId: matchedEmployee?.id || '',
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
-      employmentType: (asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
+      employmentType:
+        asset.status === 'Assigned' && asset.employmentType
+          ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
+          : '',
       employeeRole: asset.employeeRole || matchedEmployee?.role || '',
       employeeLocation: matchedEmployee?.location || asset.employeeLocation || '',
       subscriptionType: asset.subscriptionType || '',
@@ -151,11 +154,11 @@ export default function IntangibleAssetManagement() {
         assignedTo: form.status === 'Assigned' && form.employeeName ? form.employeeName : undefined,
         createdBy: user?.id || 'higher_management',
           assignerLocation: form.assignerLocation,
-          employeeName: form.employeeName,
-          employeeContactNumber: form.employeeContactNumber,
-          employmentType: form.employmentType,
-          employeeRole: form.employeeRole,
-          employeeLocation: form.employeeLocation,
+          employeeName: form.status === 'Assigned' ? form.employeeName : '',
+          employeeContactNumber: form.status === 'Assigned' ? form.employeeContactNumber : '',
+          employmentType: form.status === 'Assigned' ? form.employmentType : '',
+          employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
+          employeeLocation: form.status === 'Assigned' ? form.employeeLocation : '',
           subscriptionType: form.subscriptionType,
           validityStartDate: form.validityStartDate,
           validityEndDate: form.validityEndDate,
@@ -238,9 +241,10 @@ export default function IntangibleAssetManagement() {
       </div>
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[1600px] w-full text-sm">
+          <table className="min-w-[1700px] w-full text-sm">
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset ID</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Status</th>
@@ -261,17 +265,17 @@ export default function IntangibleAssetManagement() {
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={16} className="px-4 py-10 text-center text-sm text-muted-foreground">
                       No intangible assets found.
                     </td>
                   </tr>
                 ) : (
                   filteredAssets.map((asset) => (
                     <tr key={asset.id} className="border-t">
+                      <td className="px-4 py-4 font-medium text-slate-700">{asset.id}</td>
                       <td className="px-4 py-4">
                         <div>
                           <p className="font-medium text-slate-900">{asset.name}</p>
-                          <p className="text-xs text-muted-foreground">{asset.id}</p>
                         </div>
                       </td>
                       <td className="px-4 py-4">{asset.category || '—'}</td>
@@ -379,7 +383,21 @@ export default function IntangibleAssetManagement() {
             </div>
             <div className="space-y-2">
               <Label>Asset Status</Label>
-              <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as 'Available' | 'Assigned' }))}>
+              <Select
+                value={form.status}
+                onValueChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    status: value as 'Available' | 'Assigned',
+                    employeeId: value === 'Assigned' ? prev.employeeId : '',
+                    employeeName: value === 'Assigned' ? prev.employeeName : '',
+                    employeeContactNumber: value === 'Assigned' ? prev.employeeContactNumber : '',
+                    employmentType: value === 'Assigned' ? prev.employmentType : '',
+                    employeeRole: value === 'Assigned' ? prev.employeeRole : '',
+                    employeeLocation: value === 'Assigned' ? prev.employeeLocation : '',
+                  }))
+                }
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Available">Available</SelectItem>
@@ -447,11 +465,12 @@ export default function IntangibleAssetManagement() {
               <div className="space-y-2">
                 <Label>Employment Type</Label>
                 <Select
-                  value={form.employmentType}
+                  value={form.employmentType || undefined}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}
+                  disabled={employeeDetailsDisabled}
                 >
                   <SelectTrigger disabled={employeeDetailsDisabled}>
-                    <SelectValue />
+                    <SelectValue placeholder="Select employment type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Permanent">Permanent</SelectItem>

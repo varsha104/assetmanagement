@@ -69,7 +69,15 @@ function getDeadReason(asset: Asset) {
 }
 
 function getAssetLabel(asset: Asset) {
-  return asset.type === 'Tangible' ? asset.assetName || asset.name || '-' : asset.name || '-';
+  const rawAsset = asset as Asset & Record<string, unknown>;
+  const name =
+    asset.type === 'Tangible'
+      ? asset.assetName ||
+        asset.name ||
+        String(rawAsset.product_name || rawAsset.productName || rawAsset.asset_name || rawAsset.assetName || '').trim()
+      : asset.name;
+
+  return name || '-';
 }
 
 function getAssignerLabel(asset: Asset) {
@@ -102,6 +110,9 @@ export default function Dashboard() {
   const totalAssets = assets.length;
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
   const intangibleAssets = assets.filter((asset) => asset.type === 'Intangible');
+  const companyOwnedTangibleAssets = tangibleAssets.filter(
+    (asset) => asset.ownership === 'Company-Owned' || (!asset.vendor && !asset.vendorName),
+  );
   const availableTangibleAssets = tangibleAssets.filter(
     (asset) => normalizeStatus(asset.status) === 'AVAILABLE' && !isDeadAsset(asset),
   );
@@ -114,7 +125,7 @@ export default function Dashboard() {
   const assignedIntangibleAssets = intangibleAssets.filter(
     (asset) => (Boolean(asset.assignedTo) || normalizeStatus(asset.status) === 'ASSIGNED') && !isDeadAsset(asset),
   );
-  const companyOwnedAssets = assets.filter((asset) => Boolean(asset.company) && !asset.vendor).length;
+  const companyOwnedAssets = companyOwnedTangibleAssets.length;
   const vendorAssets = assets.filter((asset) => asset.type === 'Tangible' && Boolean(asset.vendor)).length;
   const availableAssets = assets.filter((asset) => normalizeStatus(asset.status) === 'AVAILABLE' && !isDeadAsset(asset)).length;
   const assignedAssets = assets.filter(
@@ -180,6 +191,7 @@ export default function Dashboard() {
     { name: 'Dead', value: deadAssets.length },
     { name: 'Other', value: lifecycleOther },
   ].filter((item) => item.value > 0);
+  const employeeRows = employees;
 
   const summaryCards = [
     { label: 'Total Assets', value: totalAssets, icon: Package, color: 'text-primary', clickable: true, filter: 'all' as const },
@@ -284,7 +296,7 @@ export default function Dashboard() {
     'company-owned': {
       title: 'Company-Owned Assets',
       description: 'Assets owned and managed by the company.',
-      assets: assets.filter((asset) => Boolean(asset.company) && !asset.vendor),
+      assets: companyOwnedTangibleAssets,
     },
     vendor: {
       title: 'Vendor Assets',
@@ -388,6 +400,56 @@ export default function Dashboard() {
           )
         ))}
       </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b bg-slate-50/70 pb-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-lg">Total Employees</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Every employee added from the dashboard appears here with their details.
+              </p>
+            </div>
+            <div className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+              {employeeRows.length} employees
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[280px] overflow-auto">
+            <Table className="text-sm">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Emp Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Contact No</TableHead>
+                  <TableHead>Employment Type</TableHead>
+                  <TableHead>Location</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employeeRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                      No employees added yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  employeeRows.map((employee) => (
+                    <TableRow key={employee.id}>
+                      <TableCell className="font-medium">{employee.name}</TableCell>
+                      <TableCell>{employee.role || '—'}</TableCell>
+                      <TableCell>{employee.phoneNumber || '—'}</TableCell>
+                      <TableCell>{employee.employmentType || '—'}</TableCell>
+                      <TableCell>{employee.location || '—'}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <Dialog open={employeeDialogOpen} onOpenChange={(open) => (open ? setEmployeeDialogOpen(true) : closeEmployeeDialog())}>
         <DialogContent className="sm:max-w-xl">
@@ -563,7 +625,7 @@ export default function Dashboard() {
                 </TableHeader>
                 <TableBody>
                   {visibleAssets.map((asset) => (
-                    <TableRow key={asset.id} className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm [&>*:not(:first-child)]:hidden">
+                    <TableRow key={asset.id}>
                       <TableCell className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           <p className="truncate font-medium text-slate-900">{getAssignerLabel(asset)}</p>
@@ -662,28 +724,28 @@ export default function Dashboard() {
                   <col className="w-[12%]" />
                   <col className="w-[12%]" />
                 </colgroup>
-                <TableHeader className="hidden sticky top-0 z-20">
+                <TableHeader className="sticky top-0 z-20">
                   <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
-                    <TableHead className="hidden h-14 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
-                    <TableHead className="hidden h-14 border-b-0 px-4 font-semibold text-white">Category</TableHead>
-                    <TableHead className="hidden h-14 border-b-0 px-4 font-semibold text-white">Vendor Name</TableHead>
-                    <TableHead className="hidden h-14 border-b-0 px-4 font-semibold text-white">Amount</TableHead>
-                    <TableHead className="hidden h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Category</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Vendor Name</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Amount</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visibleAssets.map((asset) => (
-                    <TableRow key={asset.id} className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm [&>*:not(:first-child)]:hidden">
-                      <TableCell className="flex flex-1 items-center p-0">
+                    <TableRow key={asset.id}>
+                      <TableCell>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium text-slate-900">{getAssetLabel(asset)}</p>
-                          <p className="hidden text-xs text-muted-foreground">{asset.id}</p>
+                          <p className="text-xs text-muted-foreground">{asset.id}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => openCompanyAssetInfo(asset)}
-                          className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                          className="mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                           aria-label={`View details for ${getAssetLabel(asset)}`}
                         >
                           <Info className="h-4 w-4" />
