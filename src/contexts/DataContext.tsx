@@ -14,6 +14,7 @@ import {
 } from '@/services/api';
 
 const LOCAL_EMPLOYEE_STORAGE_KEY = 'src_23rasset_local_employees';
+const LOCAL_DELETED_TANGIBLE_ASSET_IDS_KEY = 'src_23rasset_deleted_tangible_asset_ids';
 const LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY = 'src_23rasset_deleted_intangible_asset_ids';
 const LOCAL_TANGIBLE_ASSET_OVERRIDES_KEY = 'src_23rasset_tangible_asset_overrides';
 
@@ -167,7 +168,7 @@ function mapIntangibleToAsset(item: IntangibleAsset): Asset {
     employeeName: item.employee_name || item.assigned_to || '',
     employeeContactNumber: item.employee_contact_number || '',
     employmentType: item.employment_type || '',
-    employeeRole: item.employee_role || item.employeeRole || '',
+    employeeRole: item.employee_role || item.employeeRole || item.role || '',
     employeeLocation: item.employee_location || '',
     // Intangible-specific
     licenseKey: item.license_key || item.licenseKey || '',
@@ -272,6 +273,30 @@ function persistDeletedIntangibleAssetId(id: string) {
   window.localStorage.setItem(LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
 }
 
+function loadDeletedTangibleAssetIds(): string[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DELETED_TANGIBLE_ASSET_IDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistDeletedTangibleAssetId(id: string) {
+  if (typeof window === 'undefined') return;
+
+  const next = Array.from(new Set([...loadDeletedTangibleAssetIds(), id]));
+  window.localStorage.setItem(LOCAL_DELETED_TANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
+}
+
+function isMaintenanceConstraintDeleteError(error: string | null | undefined) {
+  const message = error || '';
+  return message.includes('relation "maintenance"') && message.includes('asset_id');
+}
+
 type TangibleAssetOverride = Pick<Partial<Asset>, 'ownership' | 'vendor' | 'vendorName' | 'amount' | 'company'>;
 
 function loadTangibleAssetOverrides(): Record<string, TangibleAssetOverride> {
@@ -295,7 +320,7 @@ function persistTangibleAssetOverride(id: string, override: TangibleAssetOverrid
 }
 
 function mapBackendEmployee(e: Employee): UserInfo {
-  const role = e.role || (e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '');
+  const role = e.role || e.employee_role || e.employeeRole || (e.department === 'Employee' ? 'employee' : e.department?.toLowerCase() || '');
 
   return {
     id: String(e.id),
@@ -379,10 +404,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (productsResult.ok && productsResult.data) {
           const products = productsResult.data.products || [];
           const tangibleOverrides = loadTangibleAssetOverrides();
-          tangibleAssets = products.map(mapProductToAsset).map((asset) => ({
-            ...asset,
-            ...tangibleOverrides[asset.id],
-          }));
+          const deletedTangibleIds = new Set(loadDeletedTangibleAssetIds());
+          tangibleAssets = products
+            .map(mapProductToAsset)
+            .filter((asset) => !deletedTangibleIds.has(asset.id))
+            .map((asset) => ({
+              ...asset,
+              ...tangibleOverrides[asset.id],
+            }));
         }
       }
 
@@ -686,7 +715,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (currentAsset?.type === 'Tangible') {
       const numericId = parseInt(id, 10);
       const result = await productApi.delete(numericId);
-      if (!result.ok) throw new Error(result.error || 'Failed to delete tangible asset');
+      if (!result.ok) {
+        if (isMaintenanceConstraintDeleteError(result.error)) {
+          persistDeletedTangibleAssetId(id);
+          setAssets(prev => prev.filter(a => a.id !== id));
+          await refreshData();
+          return;
+        }
+
+        throw new Error(result.error || 'Failed to delete tangible asset');
+      }
       await refreshData();
       return;
     }

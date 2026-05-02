@@ -4,7 +4,9 @@
  * Backend base URL is proxied via vite.config.ts → http://127.0.0.1:5002
  */
 
-const API_BASE = '/api';
+const API_BASE =
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? 'https://assetbackend-sag7.onrender.com' : '/api');
 
 // ─── Generic Request Helper ─────────────────────────────────────────────────
 
@@ -230,6 +232,7 @@ export interface IntangibleAsset {
     employee_name?: string;
     employee_contact_number?: string;
     employment_type?: string;
+    role?: string;
     employee_role?: string;
     employeeRole?: string;
     employee_location?: string;
@@ -285,6 +288,8 @@ export interface Employee {
     employment_type?: string;
     employmentType?: string;
     role?: string;
+    employee_role?: string;
+    employeeRole?: string;
     location?: string;
 }
 

@@ -76,6 +76,9 @@ export default function IntangibleAssetManagement() {
   const employeeDetailsDisabled = form.status === 'Available';
 
   const intangibleAssets = assets.filter((asset) => asset.type === 'Intangible');
+  const getEmployeeForAsset = (asset: Asset) =>
+    employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
+  const getEmployeeRoleForAsset = (asset: Asset) => asset.employeeRole || getEmployeeForAsset(asset)?.role || '';
 
   const filteredAssets = intangibleAssets.filter((asset) => {
     const matchesSearch =
@@ -113,7 +116,7 @@ export default function IntangibleAssetManagement() {
         asset.status === 'Assigned' && asset.employmentType
           ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
           : '',
-      employeeRole: asset.employeeRole || matchedEmployee?.role || '',
+      employeeRole: getEmployeeRoleForAsset(asset),
       employeeLocation: matchedEmployee?.location || asset.employeeLocation || '',
       subscriptionType: asset.subscriptionType || '',
       validityStartDate: asset.validityStartDate || asset.purchaseDate || '',
@@ -241,10 +244,9 @@ export default function IntangibleAssetManagement() {
       </div>
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[1700px] w-full text-sm">
+          <table className="min-w-[1600px] w-full text-sm">
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Asset ID</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Status</th>
@@ -265,14 +267,13 @@ export default function IntangibleAssetManagement() {
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={15} className="px-4 py-10 text-center text-sm text-muted-foreground">
                       No intangible assets found.
                     </td>
                   </tr>
                 ) : (
                   filteredAssets.map((asset) => (
                     <tr key={asset.id} className="border-t">
-                      <td className="px-4 py-4 font-medium text-slate-700">{asset.id}</td>
                       <td className="px-4 py-4">
                         <div>
                           <p className="font-medium text-slate-900">{asset.name}</p>
@@ -286,7 +287,7 @@ export default function IntangibleAssetManagement() {
                       <td className="px-4 py-4">{asset.employeeName || asset.assignedTo || '—'}</td>
                       <td className="px-4 py-4">{asset.employeeContactNumber || '—'}</td>
                       <td className="px-4 py-4">{asset.employmentType || '—'}</td>
-                      <td className="px-4 py-4">{asset.employeeRole || '—'}</td>
+                      <td className="px-4 py-4">{getEmployeeRoleForAsset(asset) || '—'}</td>
                       <td className="px-4 py-4">{asset.employeeLocation || '—'}</td>
                       <td className="px-4 py-4">{asset.subscriptionType || '—'}</td>
                       <td className="px-4 py-4">{asset.validityStartDate || asset.purchaseDate || '—'}</td>
