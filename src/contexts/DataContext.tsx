@@ -32,12 +32,16 @@ function mapBackendStatusToFrontend(currentStatus: string | undefined, assignedT
   const normalizedStatus = normalizeStatus(currentStatus);
   const statusKey = normalizedStatus.toUpperCase();
 
-  if (assignedTo) {
-    return 'Assigned';
-  }
-
   if (['AVAILABLE', 'IN STOCK', 'ACTIVE'].includes(statusKey)) {
     return 'Available';
+  }
+
+  if (['UNDER REPAIR', 'REPAIR', 'IN REPAIR'].includes(statusKey)) {
+    return 'Under Repair';
+  }
+
+  if (['REPLACEMENT', 'RETIRED', 'OBSOLETE', 'DISPOSAL'].includes(statusKey)) {
+    return normalizedStatus as AssetStatus;
   }
 
   if (['ASSIGNED', 'ISSUED'].includes(statusKey)) {
@@ -46,6 +50,10 @@ function mapBackendStatusToFrontend(currentStatus: string | undefined, assignedT
 
   if (['RETURN REQUESTED', 'RETURN_REQUESTED'].includes(statusKey)) {
     return 'RETURN_REQUESTED';
+  }
+
+  if (assignedTo) {
+    return 'Assigned';
   }
 
   return (normalizedStatus as AssetStatus) || 'Available';
@@ -336,6 +344,20 @@ function mapBackendEmployee(e: Employee): UserInfo {
   };
 }
 
+function mapBackendRepair(repair: Repair): Issue {
+  return {
+    id: String(repair.id),
+    assetId: String(repair.product_id),
+    raisedBy: String(repair.user_id || ''),
+    description: repair.issue_description || repair.message || '',
+    priority: 'High',
+    status: repair.status || 'Open',
+    createdAt: repair.repair_date || '',
+    resolvedAt: repair.return_date || undefined,
+    resolution: repair.message || undefined,
+  };
+}
+
 function mergeEmployeeDirectory(backendEmployees: UserInfo[], localEmployees: UserInfo[]) {
   const merged = [...localEmployees];
   for (const employee of backendEmployees) {
@@ -442,9 +464,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setEmployees(mergeEmployeeDirectory(backendEmployees, localEmployeesRef.current));
       }
 
+      if (isDashboardRoute || isTangibleRoute) {
+        const repairsResult = await repairApi.getAll();
+        if (repairsResult.ok && repairsResult.data) {
+          const rawRepairs = repairsResult.data as unknown as { repairs?: Repair[] };
+          const repairData = rawRepairs.repairs || (Array.isArray(repairsResult.data) ? repairsResult.data : []);
+          setIssues(repairData.map(mapBackendRepair));
+        }
+      }
+
       // Legacy dashboard/admin data kept for reference only:
       // const approvalsResult = await assetRequestApi.getAll();
-      // const repairsResult = await repairApi.getAll();
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -525,29 +555,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const backendStatus = mapFrontendStatusToBackend(asset.status, 'Tangible');
       const result = await productApi.add({
         assetName: asset.assetName || asset.name || '',
+        asset_name: asset.assetName || asset.name || '',
+        product_name: asset.assetName || asset.name || '',
         assignedTo: asset.assignedTo || '',
+        assigned_to: asset.assignedTo || '',
         serialNumber: asset.serialNumber || '',
+        serial_number: asset.serialNumber || '',
         name: asset.assignerName || '',
         createdBy: asset.assignerName || asset.createdBy || '',
+        created_by: asset.assignerName || asset.createdBy || '',
         type: asset.type,
         category: asset.category,
         company: asset.company || asset.vendorName || asset.vendor || '',
         purchaseDate: asset.purchaseDate || '',
+        purchase_date: asset.purchaseDate || null,
         warrantyPeriod: asset.warrantyPeriod || '',
+        warranty_period: asset.warrantyPeriod || '',
         status: backendStatus,
         condition: asset.condition || 'New',
         approvalStatus: asset.approvalStatus || 'Approved',
+        approval_status: asset.approvalStatus || 'Approved',
         assignerLocation: asset.assignerLocation || '',
+        assigner_location: asset.assignerLocation || '',
         employeeName: asset.employeeName || asset.assignedTo || '',
+        employee_name: asset.employeeName || asset.assignedTo || '',
         employeeContactNumber: asset.employeeContactNumber || '',
+        employee_contact_number: asset.employeeContactNumber || '',
         employmentType: asset.employmentType || '',
+        employment_type: asset.employmentType || '',
         employeeRole: asset.employeeRole || '',
         employee_role: asset.employeeRole || '',
         employeeLocation: asset.employeeLocation || '',
+        employee_location: asset.employeeLocation || '',
         ownership: asset.ownership || (asset.vendorName || asset.vendor ? 'Vendor Asset' : 'Company-Owned'),
         vendorName: asset.vendorName || asset.vendor || '',
+        vendor_name: asset.vendorName || asset.vendor || '',
         laptopModelNumber: asset.laptopModelNumber || '',
+        laptop_model_number: asset.laptopModelNumber || '',
         laptopSpecifications: asset.laptopSpecifications || '',
+        laptop_specifications: asset.laptopSpecifications || '',
         amount: asset.amount || 0,
       });
       if (!result.ok) {
@@ -773,9 +819,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       user_id: parseInt(issue.raisedBy),
       product_id: parseInt(issue.assetId),
     });
-    if (result.ok) {
-      await refreshData();
+    if (!result.ok) {
+      throw new Error(result.error || 'Failed to add repair issue');
     }
+
+    await refreshData();
   }, [refreshData]);
 
   const updateIssueStatus = useCallback((id: string, status: IssueStatus, extra?: Partial<Issue>) => {

@@ -14,8 +14,8 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       "/api": {
         // target: 'https://asset-management-djrc.onrender.com',
-        // target: 'https://assetbackend-sag7.onrender.com',
-        target: "http://127.0.0.1:5002",
+        target: 'https://assetbackend-sag7.onrender.com',
+        //target: "http://127.0.0.1:5002",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ""),

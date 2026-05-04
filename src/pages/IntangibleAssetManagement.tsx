@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -72,6 +73,7 @@ export default function IntangibleAssetManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [form, setForm] = useState<IntangibleFormState>(emptyForm());
   const employeeDetailsDisabled = form.status === 'Available';
 
@@ -89,6 +91,21 @@ export default function IntangibleAssetManagement() {
     const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+  const filteredAssetIds = filteredAssets.map((asset) => asset.id);
+  const selectedVisibleAssetIds = selectedAssetIds.filter((id) => filteredAssetIds.includes(id));
+  const allVisibleSelected = filteredAssetIds.length > 0 && selectedVisibleAssetIds.length === filteredAssetIds.length;
+  const someVisibleSelected = selectedVisibleAssetIds.length > 0 && !allVisibleSelected;
+
+  const toggleAssetSelection = (id: string, checked: boolean) => {
+    setSelectedAssetIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((item) => item !== id)));
+  };
+
+  const toggleAllVisibleAssets = (checked: boolean) => {
+    setSelectedAssetIds((prev) => {
+      const hiddenSelections = prev.filter((id) => !filteredAssetIds.includes(id));
+      return checked ? [...hiddenSelections, ...filteredAssetIds] : hiddenSelections;
+    });
+  };
 
   const openAdd = () => {
     setEditingId(null);
@@ -191,8 +208,42 @@ export default function IntangibleAssetManagement() {
   };
 
   const handleDelete = async (id: string) => {
-    deleteAsset(id);
-    toast({ title: 'Intangible asset removed' });
+    try {
+      await deleteAsset(id);
+      setSelectedAssetIds((prev) => prev.filter((item) => item !== id));
+      toast({ title: 'Intangible asset removed' });
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: error instanceof Error ? error.message : 'Unable to delete intangible asset.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedAssetIds.length === 0) return;
+
+    const idsToDelete = [...selectedAssetIds];
+    setSubmitting(true);
+    try {
+      for (const id of idsToDelete) {
+        await deleteAsset(id);
+      }
+      setSelectedAssetIds([]);
+      toast({
+        title: 'Intangible assets removed',
+        description: `${idsToDelete.length} selected asset${idsToDelete.length === 1 ? '' : 's'} deleted.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Bulk delete failed',
+        description: error instanceof Error ? error.message : 'Unable to delete selected intangible assets.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (isLoading) {
@@ -242,11 +293,36 @@ export default function IntangibleAssetManagement() {
           </Button>
         </div>
       </div>
+      {selectedAssetIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
+            Selected: {selectedAssetIds.length}
+          </span>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => void handleBulkDelete()}
+            disabled={submitting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Selected ({selectedAssetIds.length})
+          </Button>
+        </div>
+      )}
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[1600px] w-full text-sm">
+          <table className="min-w-[1660px] w-full text-sm">
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+                    onCheckedChange={(checked) => toggleAllVisibleAssets(checked === true)}
+                    aria-label="Select all visible intangible assets"
+                    className="border-white data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0b2a59]"
+                  />
+                </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Status</th>
@@ -267,13 +343,20 @@ export default function IntangibleAssetManagement() {
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={16} className="px-4 py-10 text-center text-sm text-muted-foreground">
                       No intangible assets found.
                     </td>
                   </tr>
                 ) : (
                   filteredAssets.map((asset) => (
                     <tr key={asset.id} className="border-t">
+                      <td className="px-4 py-4">
+                        <Checkbox
+                          checked={selectedAssetIds.includes(asset.id)}
+                          onCheckedChange={(checked) => toggleAssetSelection(asset.id, checked === true)}
+                          aria-label={`Select ${asset.name || 'asset'}`}
+                        />
+                      </td>
                       <td className="px-4 py-4">
                         <div>
                           <p className="font-medium text-slate-900">{asset.name}</p>

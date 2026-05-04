@@ -2,6 +2,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilter, getUniqueValues } from '@/components/ColumnFilter';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -136,6 +137,7 @@ export default function TangibleAssetManagement() {
   const [actionReason, setActionReason] = useState('');
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
   const [employeeInfoAsset, setEmployeeInfoAsset] = useState<Asset | null>(null);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [columnFilters, setColumnFilters] = useState<Record<TangibleFilterKey, string[]>>({
     assignerName: [],
     category: [],
@@ -183,6 +185,21 @@ export default function TangibleAssetManagement() {
   });
   const totalAssetsCount = tangibleAssets.length;
   const filteredAssetsCount = filteredAssets.length;
+  const filteredAssetIds = filteredAssets.map((asset) => asset.id);
+  const selectedVisibleAssetIds = selectedAssetIds.filter((id) => filteredAssetIds.includes(id));
+  const allVisibleSelected = filteredAssetIds.length > 0 && selectedVisibleAssetIds.length === filteredAssetIds.length;
+  const someVisibleSelected = selectedVisibleAssetIds.length > 0 && !allVisibleSelected;
+
+  const toggleAssetSelection = (id: string, checked: boolean) => {
+    setSelectedAssetIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((item) => item !== id)));
+  };
+
+  const toggleAllVisibleAssets = (checked: boolean) => {
+    setSelectedAssetIds((prev) => {
+      const hiddenSelections = prev.filter((id) => !filteredAssetIds.includes(id));
+      return checked ? [...hiddenSelections, ...filteredAssetIds] : hiddenSelections;
+    });
+  };
 
   const openAdd = () => {
     setEditingId(null);
@@ -297,6 +314,7 @@ export default function TangibleAssetManagement() {
   const handleDelete = async (id: string) => {
     try {
       await deleteAsset(id);
+      setSelectedAssetIds((prev) => prev.filter((item) => item !== id));
       toast({ title: 'Tangible asset removed' });
     } catch (error) {
       toast({
@@ -304,6 +322,31 @@ export default function TangibleAssetManagement() {
         description: error instanceof Error ? error.message : 'Unable to delete tangible asset.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedAssetIds.length === 0) return;
+
+    const idsToDelete = [...selectedAssetIds];
+    setSubmitting(true);
+    try {
+      for (const id of idsToDelete) {
+        await deleteAsset(id);
+      }
+      setSelectedAssetIds([]);
+      toast({
+        title: 'Tangible assets removed',
+        description: `${idsToDelete.length} selected asset${idsToDelete.length === 1 ? '' : 's'} deleted.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Bulk delete failed',
+        description: error instanceof Error ? error.message : 'Unable to delete selected tangible assets.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -338,26 +381,34 @@ export default function TangibleAssetManagement() {
       return;
     }
 
-    const nextStatus = actionMode === 'repair' ? 'Repair' : 'Replacement';
-    await updateAsset(actionAsset.id, {
-      status: nextStatus,
-      condition: trimmedReason,
-    });
+    try {
+      const nextStatus = actionMode === 'repair' ? 'Repair' : 'Replacement';
+      await updateAsset(actionAsset.id, {
+        status: nextStatus,
+        condition: trimmedReason,
+      });
 
-    await addIssue({
-      assetId: actionAsset.id,
-      raisedBy: user?.id || 'higher_management',
-      description:
-        actionMode === 'repair'
-          ? `Repair requested for ${actionAsset.name}: ${trimmedReason}`
-          : `Replacement requested for ${actionAsset.name}: ${trimmedReason}`,
-      priority: 'High',
-    });
+      await addIssue({
+        assetId: actionAsset.id,
+        raisedBy: user?.id || 'higher_management',
+        description:
+          actionMode === 'repair'
+            ? `Repair requested for ${actionAsset.name}: ${trimmedReason}`
+            : `Replacement requested for ${actionAsset.name}: ${trimmedReason}`,
+        priority: 'High',
+      });
 
-    toast({
-      title: actionMode === 'repair' ? 'Repair request raised' : 'Replacement request raised',
-    });
-    closeActionDialog();
+      toast({
+        title: actionMode === 'repair' ? 'Repair request raised' : 'Replacement request raised',
+      });
+      closeActionDialog();
+    } catch (error) {
+      toast({
+        title: actionMode === 'repair' ? 'Repair request failed' : 'Replacement request failed',
+        description: error instanceof Error ? error.message : 'Unable to raise this request.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (isLoading) {
@@ -415,12 +466,25 @@ export default function TangibleAssetManagement() {
         <span className="rounded-md border bg-blue-50 px-3 py-1 font-medium text-blue-700">
           Filtered: {filteredAssetsCount}
         </span>
+        {selectedAssetIds.length > 0 && (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => void handleBulkDelete()}
+            disabled={submitting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Selected ({selectedAssetIds.length})
+          </Button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[1680px] w-full table-fixed text-sm">
+          <table className="min-w-[1740px] w-full table-fixed text-sm">
             <colgroup>
+              <col className="w-[4%]" />
               <col className="w-[12%]" />
               <col className="w-[8%]" />
               <col className="w-[12%]" />
@@ -437,6 +501,14 @@ export default function TangibleAssetManagement() {
             </colgroup>
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+                    onCheckedChange={(checked) => toggleAllVisibleAssets(checked === true)}
+                    aria-label="Select all visible tangible assets"
+                    className="border-white data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0b2a59]"
+                  />
+                </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
                   <ColumnFilter
                     title="Assigner Name"
@@ -551,13 +623,20 @@ export default function TangibleAssetManagement() {
             <tbody>
               {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={14} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No tangible assets found.
                   </td>
                 </tr>
               ) : (
                 filteredAssets.map((asset) => (
                   <tr key={asset.id} className="border-t">
+                    <td className="px-4 py-4">
+                      <Checkbox
+                        checked={selectedAssetIds.includes(asset.id)}
+                        onCheckedChange={(checked) => toggleAssetSelection(asset.id, checked === true)}
+                        aria-label={`Select ${asset.assetName || asset.name || 'asset'}`}
+                      />
+                    </td>
                     <td className="px-4 py-4">
                       <div>
                         <p className="font-medium text-slate-900">{asset.assignerName || '—'}</p>

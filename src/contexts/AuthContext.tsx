@@ -17,12 +17,32 @@ function mapDepartmentToRole(_department: string): UserRole {
   return 'higher_management';
 }
 
+function loadStoredUser(): User | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const rawUser = window.localStorage.getItem('auth_user');
+    if (!rawUser) return null;
+
+    const parsedUser = JSON.parse(rawUser) as Partial<User>;
+    if (!parsedUser.id || !parsedUser.username || !parsedUser.email) return null;
+
+    return {
+      id: String(parsedUser.id),
+      username: parsedUser.username,
+      name: parsedUser.name || parsedUser.username,
+      email: parsedUser.email,
+      role: parsedUser.role || 'higher_management',
+      department: parsedUser.department || 'Higher Management',
+    };
+  } catch {
+    window.localStorage.removeItem('auth_user');
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    // Restore from localStorage on page refresh
-    const stored = localStorage.getItem('auth_user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<User | null>(() => loadStoredUser());
   const [isLoading, setIsLoading] = useState(false);
 
   const login = useCallback(async (username: string, password: string) => {

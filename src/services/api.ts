@@ -400,14 +400,15 @@ export const repairApi = {
             body: JSON.stringify(payload),
         }),
 
+    getAll: () =>
+        request<{ repairs: Repair[] }>('/get_repairs', { method: 'GET' }),
+
     // Legacy repair admin/query helpers kept for reference only:
     // add: (payload: Record<string, unknown>) =>
     //     request<{ message: string }>('/add_repair', {
     //         method: 'POST',
     //         body: JSON.stringify(payload),
     //     }),
-    // getAll: () =>
-    //     request<Repair[]>('/get_repairs', { method: 'GET' }),
     // updateStatus: (id: number, payload: Record<string, unknown>) =>
     //     request<{ message: string }>(`/edit_repair_status/${id}`, {
     //         method: 'PUT',
