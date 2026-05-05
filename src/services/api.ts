@@ -277,6 +277,24 @@ export const intangibleApi = {
 
 // ─── Employee APIs ──────────────────────────────────────────────────────────
 
+export interface RenewalNotification {
+    id?: number | string;
+    asset_id?: number | string;
+    title?: string;
+    message?: string;
+    asset_name?: string;
+    name?: string;
+    renewal_date?: string;
+    days_before?: number;
+    daysBefore?: number;
+    created_at?: string;
+}
+
+export const notificationApi = {
+    getRenewalNotifications: () =>
+        request<{ notifications?: RenewalNotification[] } | RenewalNotification[]>('/renewal-notifications', { method: 'GET' }),
+};
+
 export interface Employee {
     id: number;
     name: string;

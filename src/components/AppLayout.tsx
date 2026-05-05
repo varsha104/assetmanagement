@@ -3,6 +3,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth, getRoleLabel } from '@/contexts/AuthContext';
 import { Outlet } from 'react-router-dom';
 import headerLogo from '@/assets/headerlogo.png';
+import { NotificationBell } from '@/components/NotificationBell';
 
 export default function AppLayout() {
   const { user } = useAuth();
@@ -27,6 +28,7 @@ export default function AppLayout() {
               </div>
               {user && (
                 <div className="flex min-w-[180px] items-center justify-end gap-3">
+                  <NotificationBell />
                   <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-md font-medium">
                     {getRoleLabel(user.role)}
                   </span>
