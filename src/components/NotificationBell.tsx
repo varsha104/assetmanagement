@@ -56,6 +56,9 @@ export function NotificationBell() {
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-900">{notification.title}</p>
                     <p className="mt-1 text-sm text-slate-600">{notification.message}</p>
+                    {notification.category ? (
+                      <p className="mt-1 text-xs font-medium text-slate-500">Category: {notification.category}</p>
+                    ) : null}
                     <p className="mt-2 text-xs text-slate-500">
                       {notification.daysBefore} day{notification.daysBefore === 1 ? '' : 's'} before renewal
                     </p>

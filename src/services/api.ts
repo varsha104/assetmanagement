@@ -284,6 +284,7 @@ export interface RenewalNotification {
     message?: string;
     asset_name?: string;
     name?: string;
+    category?: string;
     renewal_date?: string;
     days_before?: number;
     daysBefore?: number;

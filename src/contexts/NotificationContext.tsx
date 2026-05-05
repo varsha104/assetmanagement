@@ -12,6 +12,7 @@ export type AppNotification = {
   title: string;
   message: string;
   assetName: string;
+  category?: string;
   renewalDate: string;
   daysBefore: number;
   isRead: boolean;
@@ -114,6 +115,7 @@ function buildRenewalNotifications(assets: IntangibleAsset[], readIds: string[])
         title: 'Renewal Reminder',
         message: `${assetName} renewal is due on ${formatDate(renewalDate)}.`,
         assetName,
+        category: asset.category,
         renewalDate,
         daysBefore: daysUntilRenewal,
         isRead: readIds.includes(id),
@@ -141,14 +143,16 @@ function buildBackendNotifications(items: RenewalNotification[], readIds: string
       const assetId = item.asset_id || item.id || item.asset_name || item.name || 'asset';
       const daysBefore = item.days_before ?? item.daysBefore ?? 0;
       const assetName = item.asset_name || item.name || 'Intangible asset';
+      const category = item.category || 'Uncategorized';
       const renewalDate = item.renewal_date || '';
       const id = String(item.id || `intangible-renewal-${assetId}-${daysBefore}`);
 
       return {
         id,
         title: item.title || 'Renewal Reminder',
-        message: item.message || `${assetName} renewal is due on ${formatDate(renewalDate)}.`,
+        message: item.message || `${assetName} (${category}) renewal is due on ${formatDate(renewalDate)}.`,
         assetName,
+        category,
         renewalDate,
         daysBefore,
         isRead: readIds.includes(id),
