@@ -20,12 +20,25 @@ function mapDepartmentToRole(_department: string): UserRole {
 function loadStoredUser(): User | null {
   if (typeof window === 'undefined') return null;
 
-  window.localStorage.removeItem('auth_user');
-  window.localStorage.removeItem('EmployeeId');
-  window.localStorage.removeItem('Department');
-  window.localStorage.removeItem('Email');
+  try {
+    const rawUser = window.localStorage.getItem('auth_user');
+    if (!rawUser) return null;
 
-  return null;
+    const parsed = JSON.parse(rawUser) as Partial<User>;
+    if (!parsed.id || !parsed.username || !parsed.role) return null;
+
+    return {
+      id: String(parsed.id),
+      username: parsed.username,
+      name: parsed.name || parsed.username,
+      email: parsed.email || '',
+      role: parsed.role,
+      department: parsed.department || 'Higher Management',
+    };
+  } catch {
+    window.localStorage.removeItem('auth_user');
+    return null;
+  }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -48,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         setUser(userData);
+        localStorage.setItem('auth_user', JSON.stringify(userData));
         localStorage.setItem('EmployeeId', String(result.data.id));
         localStorage.setItem('Department', 'Higher Management');
         localStorage.setItem('Email', result.data.email);
