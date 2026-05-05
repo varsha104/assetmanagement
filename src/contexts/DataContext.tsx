@@ -281,6 +281,13 @@ function persistDeletedIntangibleAssetId(id: string) {
   window.localStorage.setItem(LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
 }
 
+function removeDeletedIntangibleAssetId(id: string) {
+  if (typeof window === 'undefined') return;
+
+  const next = loadDeletedIntangibleAssetIds().filter((item) => item !== id);
+  window.localStorage.setItem(LOCAL_DELETED_INTANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
+}
+
 function loadDeletedTangibleAssetIds(): string[] {
   if (typeof window === 'undefined') return [];
 
@@ -297,6 +304,13 @@ function persistDeletedTangibleAssetId(id: string) {
   if (typeof window === 'undefined') return;
 
   const next = Array.from(new Set([...loadDeletedTangibleAssetIds(), id]));
+  window.localStorage.setItem(LOCAL_DELETED_TANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
+}
+
+function removeDeletedTangibleAssetId(id: string) {
+  if (typeof window === 'undefined') return;
+
+  const next = loadDeletedTangibleAssetIds().filter((item) => item !== id);
   window.localStorage.setItem(LOCAL_DELETED_TANGIBLE_ASSET_IDS_KEY, JSON.stringify(next));
 }
 
@@ -380,6 +394,7 @@ interface DataContextType {
   addAsset: (asset: Partial<Asset> & { type: AssetType }) => Promise<void>;
   updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
+  restoreDeletedAsset: (asset: Asset) => Promise<void>;
   addAssignment: (assignment: Omit<AssetAssignment, 'id' | 'approvalStatus'>) => void;
   returnAsset: (assignmentId: string) => void;
   addIssue: (issue: Omit<Issue, 'id' | 'createdAt' | 'status'>) => Promise<void>;
@@ -783,6 +798,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [assets, refreshData]);
 
+  const restoreDeletedAsset = useCallback(async (asset: Asset) => {
+    if (asset.type === 'Intangible' && loadDeletedIntangibleAssetIds().includes(asset.id)) {
+      removeDeletedIntangibleAssetId(asset.id);
+      await refreshData();
+      return;
+    }
+
+    if (asset.type === 'Tangible' && loadDeletedTangibleAssetIds().includes(asset.id)) {
+      removeDeletedTangibleAssetId(asset.id);
+      await refreshData();
+      return;
+    }
+
+    await addAsset(asset);
+  }, [addAsset, refreshData]);
+
   const addAssignment = useCallback(async (assignment: Omit<AssetAssignment, 'id' | 'approvalStatus'>) => {
     // Legacy assignment flow kept for reference only.
     // const assetId = assignment.assetId;
@@ -864,6 +895,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         addAsset,
         updateAsset,
         deleteAsset,
+        restoreDeletedAsset,
         addAssignment,
         returnAsset,
         addIssue,

@@ -1,6 +1,16 @@
 ﻿import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilter, getUniqueValues } from '@/components/ColumnFilter';
@@ -16,9 +26,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ToastAction } from '@/components/ui/toast';
 import { StatusBadge } from '@/components/StatusBadges';
-import { CircleEllipsis, Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
+import { CircleEllipsis, Download, Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
 import { Asset } from '@/types';
 
 const TANGIBLE_CATEGORIES = ['Laptop', 'Desktop', 'Mouse', 'Headset'] as const;
@@ -69,6 +81,25 @@ const tangibleFilterAccessors: Record<TangibleFilterKey, (asset: Asset) => strin
   specifications: (asset) => asset.laptopSpecifications || '—',
 };
 
+const TANGIBLE_EXPORT_COLUMNS: CsvColumn<Asset>[] = [
+  { header: 'Serial No.', value: (asset) => asset.serialNumber },
+  { header: 'Assigner Name', value: (asset) => asset.assignerName },
+  { header: 'Category', value: (asset) => asset.category },
+  { header: 'Asset Name', value: (asset) => asset.assetName || asset.name },
+  { header: 'Asset Status', value: (asset) => asset.status },
+  { header: 'Assigner Location', value: (asset) => asset.assignerLocation },
+  { header: 'Employee Name', value: (asset) => asset.employeeName || asset.assignedTo },
+  { header: 'Employee Contact Number', value: (asset) => asset.employeeContactNumber },
+  { header: 'Employment Type', value: (asset) => asset.employmentType },
+  { header: 'Role', value: (asset) => asset.employeeRole },
+  { header: 'Employee Location', value: (asset) => asset.employeeLocation },
+  { header: 'Ownership', value: (asset) => getOwnershipLabel(asset) },
+  { header: 'Vendor Name', value: (asset) => asset.vendorName || asset.vendor },
+  { header: 'Amount', value: (asset) => asset.amount },
+  { header: 'Model No.', value: (asset) => asset.laptopModelNumber },
+  { header: 'Specifications', value: (asset) => asset.laptopSpecifications },
+];
+
 function normalizeTangibleCategory(value?: string) {
   return TANGIBLE_CATEGORIES.includes(value as (typeof TANGIBLE_CATEGORIES)[number]) ? value || 'Laptop' : 'Other';
 }
@@ -79,6 +110,30 @@ function isStandardTangibleCategory(value?: string) {
 
 function normalizeAssignerLocation(value?: string) {
   return ASSIGNER_LOCATIONS.includes(value as (typeof ASSIGNER_LOCATIONS)[number]) ? value || '' : '';
+}
+
+function generateTangibleSerialNumber(assets: Asset[], excludeId?: string) {
+  const existingSerials = new Set(
+    assets
+      .filter((asset) => asset.id !== excludeId)
+      .map((asset) => asset.serialNumber?.trim().toUpperCase())
+      .filter(Boolean),
+  );
+  const maxAutoSerial = assets.reduce((max, asset) => {
+    if (asset.id === excludeId) return max;
+
+    const match = asset.serialNumber?.trim().match(/^TAN-(\d+)$/i);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  let nextNumber = Math.max(maxAutoSerial, assets.filter((asset) => asset.id !== excludeId).length) + 1;
+  let serialNumber = `TAN-${String(nextNumber).padStart(4, '0')}`;
+
+  while (existingSerials.has(serialNumber)) {
+    nextNumber += 1;
+    serialNumber = `TAN-${String(nextNumber).padStart(4, '0')}`;
+  }
+
+  return serialNumber;
 }
 
 type TangibleFormState = {
@@ -101,6 +156,11 @@ type TangibleFormState = {
   vendorName: string;
   amount: string;
 };
+
+type DeleteConfirmState =
+  | { type: 'single'; asset: Asset }
+  | { type: 'bulk' }
+  | null;
 
 const emptyForm = (): TangibleFormState => ({
   name: '',
@@ -125,7 +185,7 @@ const emptyForm = (): TangibleFormState => ({
 
 export default function TangibleAssetManagement() {
   const { user } = useAuth();
-  const { assets, addAsset, updateAsset, deleteAsset, addIssue, employees, isLoading } = useData();
+  const { assets, addAsset, updateAsset, deleteAsset, restoreDeletedAsset, addIssue, employees, isLoading } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Available' | 'Assigned'>('all');
@@ -138,6 +198,7 @@ export default function TangibleAssetManagement() {
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
   const [employeeInfoAsset, setEmployeeInfoAsset] = useState<Asset | null>(null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(null);
   const [columnFilters, setColumnFilters] = useState<Record<TangibleFilterKey, string[]>>({
     assignerName: [],
     category: [],
@@ -184,11 +245,11 @@ export default function TangibleAssetManagement() {
     return matchesSearch && matchesStatus && matchesColumnFilters;
   });
   const totalAssetsCount = tangibleAssets.length;
-  const filteredAssetsCount = filteredAssets.length;
   const filteredAssetIds = filteredAssets.map((asset) => asset.id);
   const selectedVisibleAssetIds = selectedAssetIds.filter((id) => filteredAssetIds.includes(id));
   const allVisibleSelected = filteredAssetIds.length > 0 && selectedVisibleAssetIds.length === filteredAssetIds.length;
   const someVisibleSelected = selectedVisibleAssetIds.length > 0 && !allVisibleSelected;
+  const getAssetDisplayName = (asset: Asset) => asset.assetName || asset.name || 'this tangible asset';
 
   const toggleAssetSelection = (id: string, checked: boolean) => {
     setSelectedAssetIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((item) => item !== id)));
@@ -203,8 +264,28 @@ export default function TangibleAssetManagement() {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm(emptyForm());
+    setForm({
+      ...emptyForm(),
+      serialNumber: generateTangibleSerialNumber(tangibleAssets),
+    });
     setDialogOpen(true);
+  };
+
+  const handleExport = () => {
+    if (filteredAssets.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'No tangible assets match the current filters.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    exportCsv('tangible-assets.csv', filteredAssets, TANGIBLE_EXPORT_COLUMNS);
+    toast({
+      title: 'Tangible assets exported',
+      description: `${filteredAssets.length} filtered asset${filteredAssets.length === 1 ? '' : 's'} downloaded.`,
+    });
   };
 
   const openEdit = (asset: Asset) => {
@@ -228,7 +309,7 @@ export default function TangibleAssetManagement() {
           : '',
       employeeRole: asset.employeeRole || matchedEmployee?.role || '',
       employeeLocation: matchedEmployee?.location || asset.employeeLocation || '',
-      serialNumber: asset.serialNumber || '',
+      serialNumber: asset.serialNumber || generateTangibleSerialNumber(tangibleAssets, asset.id),
       laptopModelNumber: asset.laptopModelNumber || '',
       laptopSpecifications: asset.laptopSpecifications || '',
       vendorName: asset.vendorName || asset.vendor || '',
@@ -245,12 +326,12 @@ export default function TangibleAssetManagement() {
 
   const handleSubmit = async () => {
     const resolvedCategory = form.category === 'Other' ? form.customCategory.trim() : form.category;
-    const serialNumber = form.serialNumber.trim();
+    const serialNumber = form.serialNumber.trim() || generateTangibleSerialNumber(tangibleAssets, editingId || undefined);
 
-    if (!form.name.trim() || !form.assetName.trim() || !resolvedCategory || !serialNumber) {
+    if (!form.name.trim() || !form.assetName.trim() || !resolvedCategory) {
       toast({
         title: 'Missing fields',
-        description: 'Please enter assigner name, category, asset name, and serial number.',
+        description: 'Please enter assigner name, category, and asset name.',
         variant: 'destructive',
       });
       return;
@@ -311,11 +392,41 @@ export default function TangibleAssetManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const undoDeletedAssets = async (deletedAssets: Asset[]) => {
     try {
-      await deleteAsset(id);
-      setSelectedAssetIds((prev) => prev.filter((item) => item !== id));
-      toast({ title: 'Tangible asset removed' });
+      for (const asset of deletedAssets) {
+        await restoreDeletedAsset(asset);
+      }
+
+      toast({
+        title: deletedAssets.length === 1 ? 'Tangible asset restored' : 'Tangible assets restored',
+        description:
+          deletedAssets.length === 1
+            ? `${getAssetDisplayName(deletedAssets[0])} is back in the list.`
+            : `${deletedAssets.length} tangible assets are back in the list.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Undo failed',
+        description: error instanceof Error ? error.message : 'Unable to restore the deleted asset.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDelete = async (asset: Asset) => {
+    try {
+      await deleteAsset(asset.id);
+      setSelectedAssetIds((prev) => prev.filter((item) => item !== asset.id));
+      toast({
+        title: 'Tangible asset removed',
+        description: `${getAssetDisplayName(asset)} was deleted.`,
+        action: (
+          <ToastAction altText={`Undo delete ${getAssetDisplayName(asset)}`} onClick={() => void undoDeletedAssets([asset])}>
+            Undo
+          </ToastAction>
+        ),
+      });
     } catch (error) {
       toast({
         title: 'Delete failed',
@@ -329,6 +440,7 @@ export default function TangibleAssetManagement() {
     if (selectedAssetIds.length === 0) return;
 
     const idsToDelete = [...selectedAssetIds];
+    const assetsToDelete = tangibleAssets.filter((asset) => idsToDelete.includes(asset.id));
     setSubmitting(true);
     try {
       for (const id of idsToDelete) {
@@ -338,6 +450,11 @@ export default function TangibleAssetManagement() {
       toast({
         title: 'Tangible assets removed',
         description: `${idsToDelete.length} selected asset${idsToDelete.length === 1 ? '' : 's'} deleted.`,
+        action: (
+          <ToastAction altText="Undo delete selected tangible assets" onClick={() => void undoDeletedAssets(assetsToDelete)}>
+            Undo
+          </ToastAction>
+        ),
       });
     } catch (error) {
       toast({
@@ -348,6 +465,18 @@ export default function TangibleAssetManagement() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+
+    if (deleteConfirm.type === 'single') {
+      await handleDelete(deleteConfirm.asset);
+    } else {
+      await handleBulkDelete();
+    }
+
+    setDeleteConfirm(null);
   };
 
   const openActionDialog = (asset: Asset, mode: 'repair' | 'replacement') => {
@@ -463,15 +592,16 @@ export default function TangibleAssetManagement() {
         <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
           Total: {totalAssetsCount}
         </span>
-        <span className="rounded-md border bg-blue-50 px-3 py-1 font-medium text-blue-700">
-          Filtered: {filteredAssetsCount}
-        </span>
+        <Button type="button" variant="outline" size="sm" onClick={handleExport}>
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
         {selectedAssetIds.length > 0 && (
           <Button
             type="button"
             variant="destructive"
             size="sm"
-            onClick={() => void handleBulkDelete()}
+            onClick={() => setDeleteConfirm({ type: 'bulk' })}
             disabled={submitting}
           >
             <Trash2 className="mr-2 h-4 w-4" />
@@ -485,6 +615,7 @@ export default function TangibleAssetManagement() {
           <table className="min-w-[1740px] w-full table-fixed text-sm">
             <colgroup>
               <col className="w-[4%]" />
+              <col className="w-[9%]" />
               <col className="w-[12%]" />
               <col className="w-[8%]" />
               <col className="w-[12%]" />
@@ -494,7 +625,6 @@ export default function TangibleAssetManagement() {
               <col className="w-[10%]" />
               <col className="w-[10%]" />
               <col className="w-[8%]" />
-              <col className="w-[9%]" />
               <col className="w-[9%]" />
               <col className="w-[12%]" />
               <col className="w-[7%]" />
@@ -507,6 +637,15 @@ export default function TangibleAssetManagement() {
                     onCheckedChange={(checked) => toggleAllVisibleAssets(checked === true)}
                     aria-label="Select all visible tangible assets"
                     className="border-white data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0b2a59]"
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
+                  <ColumnFilter
+                    title="Serial No."
+                    options={columnFilterOptions.serialNumber}
+                    selected={columnFilters.serialNumber}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, serialNumber: selected }))}
+                    dark
                   />
                 </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
@@ -592,15 +731,6 @@ export default function TangibleAssetManagement() {
                 </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
                   <ColumnFilter
-                    title="Serial No."
-                    options={columnFilterOptions.serialNumber}
-                    selected={columnFilters.serialNumber}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, serialNumber: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
-                  <ColumnFilter
                     title="Model No."
                     options={columnFilterOptions.modelNumber}
                     selected={columnFilters.modelNumber}
@@ -637,6 +767,7 @@ export default function TangibleAssetManagement() {
                         aria-label={`Select ${asset.assetName || asset.name || 'asset'}`}
                       />
                     </td>
+                    <td className="px-4 py-4">{asset.serialNumber || '—'}</td>
                     <td className="px-4 py-4">
                       <div>
                         <p className="font-medium text-slate-900">{asset.assignerName || '—'}</p>
@@ -666,7 +797,6 @@ export default function TangibleAssetManagement() {
                     <td className="px-4 py-4">{getOwnershipLabel(asset)}</td>
                     <td className="px-4 py-4">{asset.vendorName || asset.vendor || '—'}</td>
                     <td className="px-4 py-4">{asset.amount != null ? asset.amount : '—'}</td>
-                    <td className="px-4 py-4">{asset.serialNumber || '—'}</td>
                     <td className="px-4 py-4">{asset.laptopModelNumber || '—'}</td>
                     <td className="px-4 py-4">{asset.laptopSpecifications || '—'}</td>
                     <td className="px-4 py-4">
@@ -699,7 +829,7 @@ export default function TangibleAssetManagement() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onClick={() => void handleDelete(asset.id)}
+                              onClick={() => setDeleteConfirm({ type: 'single', asset })}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
@@ -717,14 +847,15 @@ export default function TangibleAssetManagement() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Tangible Asset' : 'Add Tangible Asset'}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden border-0 p-0 sm:max-w-3xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">{editingId ? 'Edit Tangible Asset' : 'Add Tangible Asset'}</DialogTitle>
+            <DialogDescription className="text-sm text-white/80">
               Fill in the physical asset details required for tangible asset management.
             </DialogDescription>
           </DialogHeader>
 
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Assigner Name</Label>
@@ -922,7 +1053,7 @@ export default function TangibleAssetManagement() {
               </div>
               <div className="space-y-2">
                 <Label>Serial Number</Label>
-                <Input value={form.serialNumber} onChange={(e) => setForm((prev) => ({ ...prev, serialNumber: e.target.value }))} />
+                <Input value={form.serialNumber} readOnly className="bg-slate-50 text-slate-700" />
               </div>
             <div className="space-y-2">
               <Label>Model Number</Label>
@@ -938,8 +1069,9 @@ export default function TangibleAssetManagement() {
                 />
               </div>
             </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t bg-slate-50 px-6 py-5">
             <Button variant="outline" onClick={resetAndClose} disabled={submitting}>
               Cancel
             </Button>
@@ -952,15 +1084,15 @@ export default function TangibleAssetManagement() {
       </Dialog>
 
       <Dialog open={Boolean(employeeInfoAsset)} onOpenChange={(open) => (open ? undefined : closeEmployeeInfoDialog())}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Employee Info</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-md [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">Employee Info</DialogTitle>
+            <DialogDescription className="text-sm text-white/80">
               Additional employee details for the selected tangible asset.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-2">
+          <div className="grid gap-4 px-6 py-5">
             <div className="space-y-1">
               <Label>Emp Contact No</Label>
               <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeContactNumber || '—'}</p>
@@ -979,28 +1111,70 @@ export default function TangibleAssetManagement() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={closeEmployeeInfoDialog}>
+          <DialogFooter className="border-t bg-slate-50 px-6 py-4">
+            <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" onClick={closeEmployeeInfoDialog}>
               Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={Boolean(deleteConfirm)} onOpenChange={(open) => (!open ? setDeleteConfirm(null) : undefined)}>
+        <AlertDialogContent className="border-0 p-0 sm:max-w-md">
+          <AlertDialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <AlertDialogTitle className="text-xl text-white">Confirm Delete</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-white/80">
+              {deleteConfirm?.type === 'single'
+                ? `Are you sure you want to delete this tangible asset?`
+                : `Are you sure you want to delete ${selectedAssetIds.length} selected tangible asset${
+                    selectedAssetIds.length === 1 ? '' : 's'
+                  }?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 px-6 py-5 text-sm text-slate-600">
+            {deleteConfirm?.type === 'single' ? (
+              <div className="rounded-md border bg-slate-50 px-3 py-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Asset Name</span>
+                <p className="mt-1 font-semibold text-slate-900">{getAssetDisplayName(deleteConfirm.asset)}</p>
+              </div>
+            ) : null}
+            <p>You can restore the deleted asset from the undo option after deleting.</p>
+          </div>
+          <AlertDialogFooter className="border-t bg-slate-50 px-6 py-4">
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={submitting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={actionDialogOpen} onOpenChange={(open) => (open ? setActionDialogOpen(true) : closeActionDialog())}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-md [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">
               {actionMode === 'repair' ? 'Add Repair Reason' : 'Add Replacement Reason'}
             </DialogTitle>
-            <DialogDescription>
-              {actionMode === 'repair'
+            <DialogDescription className="space-y-1 text-sm text-white/80">
+              <span className="block font-medium text-white">
+                Asset: {actionAsset ? actionAsset.assetName || actionAsset.name || 'Selected asset' : 'Selected asset'}
+              </span>
+              <span className="block">
+              {/*{actionMode === 'repair'
                 ? 'Tell us why this asset needs repair.'
-                : 'Tell us why this asset needs replacement.'}
+                : 'Tell us why this asset needs replacement.'}*/}
+              </span>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2">
+          <div className="space-y-2 px-6 py-5">
             <Label htmlFor="asset-action-reason">Reason</Label>
             <Textarea
               id="asset-action-reason"
@@ -1011,11 +1185,11 @@ export default function TangibleAssetManagement() {
             />
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t bg-slate-50 px-6 py-4">
             <Button variant="outline" onClick={closeActionDialog}>
               Cancel
             </Button>
-            <Button onClick={() => void submitAssetAction()}>
+            <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" onClick={() => void submitAssetAction()}>
               {actionMode === 'repair' ? 'Submit Repair' : 'Submit Replacement'}
             </Button>
           </DialogFooter>

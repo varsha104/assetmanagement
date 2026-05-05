@@ -401,17 +401,16 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-      <Card className="overflow-hidden border-slate-200 shadow-sm">
-        <CardHeader className="border-b bg-slate-50/70 pb-3">
+      <Card className="shrink-0 overflow-hidden border-slate-200 shadow-sm">
+        <CardHeader className="border-b bg-[#0b2a59] pb-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-lg">Employee Details</CardTitle>
-              <p className="text-sm text-muted-foreground">
+              <CardTitle className="text-lg text-white">Employee Details</CardTitle>
+              <p className="text-sm text-white/80">
                 New employees saved from the dashboard appear here.
               </p>
             </div>
-            <div className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+            <div className="rounded-full bg-white/15 px-3 py-1 text-sm font-semibold text-white">
               {employeeRows.length} employees
             </div>
           </div>
@@ -421,11 +420,11 @@ export default function Dashboard() {
             <Table className="text-sm">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Emp Name</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Contact No</TableHead>
-                  <TableHead>Employment Type</TableHead>
-                  <TableHead>Location</TableHead>
+                  <TableHead className="font-bold" >Emp Name</TableHead>
+                  <TableHead className="font-bold">Role</TableHead>
+                  <TableHead className="font-bold">Contact No</TableHead>
+                  <TableHead className="font-bold">Employment Type</TableHead>
+                  <TableHead className="font-bold">Location</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -452,31 +451,62 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Lifecycle Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={lifecycleData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis dataKey="name" className="text-xs" />
-              <YAxis className="text-xs" />
-              <Tooltip />
-              <Bar dataKey="value" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="p-2">
+            <CardTitle className="text-lg">Lifecycle Overview</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={lifecycleData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="name" className="text-xs" />
+                <YAxis className="text-xs" />
+                <Tooltip />
+                <Bar dataKey="value" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="p-2">
+            <CardTitle className="text-lg">Asset Ownership</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={ownershipData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={4}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
+                >
+                  {ownershipData.map((_, index) => (
+                    <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={employeeDialogOpen} onOpenChange={(open) => (open ? setEmployeeDialogOpen(true) : closeEmployeeDialog())}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>New Employee</DialogTitle>
-            <DialogDescription>Capture the employee details used across both asset forms.</DialogDescription>
+        <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">New Employee</DialogTitle>
+            <DialogDescription className="text-sm text-white/80">
+              Capture the employee details used across both asset forms.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-2 sm:grid-cols-2">
+          <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="employee-name">Employee Name</Label>
               <Input
@@ -521,7 +551,7 @@ export default function Dashboard() {
                 placeholder="Enter role"
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2">
               <Label htmlFor="employee-location">Location</Label>
               <Select
                 value={employeeForm.location}
@@ -540,7 +570,7 @@ export default function Dashboard() {
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t bg-slate-50 px-6 py-4">
             <Button variant="outline" onClick={closeEmployeeDialog} disabled={employeeSubmitting}>
               Cancel
             </Button>
@@ -912,34 +942,6 @@ export default function Dashboard() {
           </ScrollArea>
         </DialogContent>
       </Dialog>
-
-      <Card>
-        <CardHeader className="p-2">
-          <CardTitle className="text-lg">Asset Ownership</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={ownershipData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={4}
-                dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
-              >
-                {ownershipData.map((_, index) => (
-                  <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
 
     </div>
   );

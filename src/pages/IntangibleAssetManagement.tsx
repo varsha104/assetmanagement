@@ -1,8 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ColumnFilter, getUniqueValues } from '@/components/ColumnFilter';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -14,17 +25,68 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ToastAction } from '@/components/ui/toast';
 import { StatusBadge } from '@/components/StatusBadges';
-import { Loader2, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Download, Loader2, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
 import { Asset } from '@/types';
 
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
 const INTANGIBLE_CATEGORIES = ['Software License', 'Cloud Subscription'] as const;
+type IntangibleFilterKey =
+  | 'name'
+  | 'category'
+  | 'status'
+  | 'assignerLocation'
+  | 'employeeName'
+  | 'employeeContactNumber'
+  | 'employmentType'
+  | 'employeeRole'
+  | 'employeeLocation'
+  | 'subscriptionType'
+  | 'validityStartDate'
+  | 'validityEndDate'
+  | 'renewalDate'
+  | 'amountPaid';
+
+const INTANGIBLE_FILTER_KEYS: IntangibleFilterKey[] = [
+  'name',
+  'category',
+  'status',
+  'assignerLocation',
+  'employeeName',
+  'employeeContactNumber',
+  'employmentType',
+  'employeeRole',
+  'employeeLocation',
+  'subscriptionType',
+  'validityStartDate',
+  'validityEndDate',
+  'renewalDate',
+  'amountPaid',
+];
 
 function normalizeAssignerLocation(value?: string) {
   return ASSIGNER_LOCATIONS.includes(value as (typeof ASSIGNER_LOCATIONS)[number]) ? value || '' : '';
 }
+
+const INTANGIBLE_EXPORT_COLUMNS: CsvColumn<Asset>[] = [
+  { header: 'Assigner Name', value: (asset) => asset.name },
+  { header: 'Category', value: (asset) => asset.category },
+  { header: 'Status', value: (asset) => asset.status },
+  { header: 'Assigner Location', value: (asset) => asset.assignerLocation },
+  { header: 'Employee Name', value: (asset) => asset.employeeName || asset.assignedTo },
+  { header: 'Employee Contact Number', value: (asset) => asset.employeeContactNumber },
+  { header: 'Employment Type', value: (asset) => asset.employmentType },
+  { header: 'Role', value: (asset) => asset.employeeRole },
+  { header: 'Employee Location', value: (asset) => asset.employeeLocation },
+  { header: 'Subscription Type', value: (asset) => asset.subscriptionType },
+  { header: 'Start Date', value: (asset) => asset.validityStartDate || asset.purchaseDate },
+  { header: 'Expiry Date', value: (asset) => asset.validityEndDate || asset.warrantyPeriod },
+  { header: 'Renewal Date', value: (asset) => asset.renewalDate },
+  { header: 'Amount Paid', value: (asset) => asset.amountPaid },
+];
 
 type IntangibleFormState = {
   name: string;
@@ -44,6 +106,11 @@ type IntangibleFormState = {
   renewalDate: string;
   amountPaid: string;
 };
+
+type DeleteConfirmState =
+  | { type: 'single'; asset: Asset }
+  | { type: 'bulk' }
+  | null;
 
 const emptyForm = (): IntangibleFormState => ({
   name: '',
@@ -66,7 +133,7 @@ const emptyForm = (): IntangibleFormState => ({
 
 export default function IntangibleAssetManagement() {
   const { user } = useAuth();
-  const { assets, addAsset, updateAsset, deleteAsset, employees, isLoading } = useData();
+  const { assets, addAsset, updateAsset, deleteAsset, restoreDeletedAsset, employees, isLoading } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Available' | 'Assigned'>('all');
@@ -74,6 +141,23 @@ export default function IntangibleAssetManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<IntangibleFilterKey, string[]>>({
+    name: [],
+    category: [],
+    status: [],
+    assignerLocation: [],
+    employeeName: [],
+    employeeContactNumber: [],
+    employmentType: [],
+    employeeRole: [],
+    employeeLocation: [],
+    subscriptionType: [],
+    validityStartDate: [],
+    validityEndDate: [],
+    renewalDate: [],
+    amountPaid: [],
+  });
   const [form, setForm] = useState<IntangibleFormState>(emptyForm());
   const employeeDetailsDisabled = form.status === 'Available';
 
@@ -81,6 +165,33 @@ export default function IntangibleAssetManagement() {
   const getEmployeeForAsset = (asset: Asset) =>
     employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
   const getEmployeeRoleForAsset = (asset: Asset) => asset.employeeRole || getEmployeeForAsset(asset)?.role || '';
+  const intangibleFilterAccessors: Record<IntangibleFilterKey, (asset: Asset) => string> = {
+    name: (asset) => asset.name || '—',
+    category: (asset) => asset.category || '—',
+    status: (asset) => asset.status || '—',
+    assignerLocation: (asset) => asset.assignerLocation || '—',
+    employeeName: (asset) => asset.employeeName || asset.assignedTo || '—',
+    employeeContactNumber: (asset) => asset.employeeContactNumber || '—',
+    employmentType: (asset) => asset.employmentType || '—',
+    employeeRole: (asset) => getEmployeeRoleForAsset(asset) || '—',
+    employeeLocation: (asset) => asset.employeeLocation || '—',
+    subscriptionType: (asset) => asset.subscriptionType || '—',
+    validityStartDate: (asset) => asset.validityStartDate || asset.purchaseDate || '—',
+    validityEndDate: (asset) => asset.validityEndDate || asset.warrantyPeriod || '—',
+    renewalDate: (asset) => asset.renewalDate || '—',
+    amountPaid: (asset) => (asset.amountPaid != null ? String(asset.amountPaid) : '—'),
+  };
+  const columnFilterOptions = useMemo(
+    () =>
+      INTANGIBLE_FILTER_KEYS.reduce(
+        (acc, key) => {
+          acc[key] = getUniqueValues(intangibleAssets, intangibleFilterAccessors[key]);
+          return acc;
+        },
+        {} as Record<IntangibleFilterKey, string[]>,
+      ),
+    [intangibleAssets, employees],
+  );
 
   const filteredAssets = intangibleAssets.filter((asset) => {
     const matchesSearch =
@@ -89,12 +200,19 @@ export default function IntangibleAssetManagement() {
       (asset.employeeName || asset.assignedTo || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.assignerLocation || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesColumnFilters = INTANGIBLE_FILTER_KEYS.every((key) => {
+      const selectedValues = columnFilters[key];
+      if (selectedValues.length === 0) return true;
+      return selectedValues.includes(intangibleFilterAccessors[key](asset));
+    });
+    return matchesSearch && matchesStatus && matchesColumnFilters;
   });
   const filteredAssetIds = filteredAssets.map((asset) => asset.id);
+  const totalAssetsCount = intangibleAssets.length;
   const selectedVisibleAssetIds = selectedAssetIds.filter((id) => filteredAssetIds.includes(id));
   const allVisibleSelected = filteredAssetIds.length > 0 && selectedVisibleAssetIds.length === filteredAssetIds.length;
   const someVisibleSelected = selectedVisibleAssetIds.length > 0 && !allVisibleSelected;
+  const getAssetDisplayName = (asset: Asset) => asset.name || 'this intangible asset';
 
   const toggleAssetSelection = (id: string, checked: boolean) => {
     setSelectedAssetIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((item) => item !== id)));
@@ -111,6 +229,23 @@ export default function IntangibleAssetManagement() {
     setEditingId(null);
     setForm(emptyForm());
     setDialogOpen(true);
+  };
+
+  const handleExport = () => {
+    if (filteredAssets.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'No intangible assets match the current filters.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    exportCsv('intangible-assets.csv', filteredAssets, INTANGIBLE_EXPORT_COLUMNS);
+    toast({
+      title: 'Intangible assets exported',
+      description: `${filteredAssets.length} filtered asset${filteredAssets.length === 1 ? '' : 's'} downloaded.`,
+    });
   };
 
   const openEdit = (asset: Asset) => {
@@ -207,11 +342,41 @@ export default function IntangibleAssetManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const undoDeletedAssets = async (deletedAssets: Asset[]) => {
     try {
-      await deleteAsset(id);
-      setSelectedAssetIds((prev) => prev.filter((item) => item !== id));
-      toast({ title: 'Intangible asset removed' });
+      for (const asset of deletedAssets) {
+        await restoreDeletedAsset(asset);
+      }
+
+      toast({
+        title: deletedAssets.length === 1 ? 'Intangible asset restored' : 'Intangible assets restored',
+        description:
+          deletedAssets.length === 1
+            ? `${getAssetDisplayName(deletedAssets[0])} is back in the list.`
+            : `${deletedAssets.length} intangible assets are back in the list.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Undo failed',
+        description: error instanceof Error ? error.message : 'Unable to restore the deleted asset.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDelete = async (asset: Asset) => {
+    try {
+      await deleteAsset(asset.id);
+      setSelectedAssetIds((prev) => prev.filter((item) => item !== asset.id));
+      toast({
+        title: 'Intangible asset removed',
+        description: `${getAssetDisplayName(asset)} was deleted.`,
+        action: (
+          <ToastAction altText={`Undo delete ${getAssetDisplayName(asset)}`} onClick={() => void undoDeletedAssets([asset])}>
+            Undo
+          </ToastAction>
+        ),
+      });
     } catch (error) {
       toast({
         title: 'Delete failed',
@@ -225,6 +390,7 @@ export default function IntangibleAssetManagement() {
     if (selectedAssetIds.length === 0) return;
 
     const idsToDelete = [...selectedAssetIds];
+    const assetsToDelete = intangibleAssets.filter((asset) => idsToDelete.includes(asset.id));
     setSubmitting(true);
     try {
       for (const id of idsToDelete) {
@@ -234,6 +400,11 @@ export default function IntangibleAssetManagement() {
       toast({
         title: 'Intangible assets removed',
         description: `${idsToDelete.length} selected asset${idsToDelete.length === 1 ? '' : 's'} deleted.`,
+        action: (
+          <ToastAction altText="Undo delete selected intangible assets" onClick={() => void undoDeletedAssets(assetsToDelete)}>
+            Undo
+          </ToastAction>
+        ),
       });
     } catch (error) {
       toast({
@@ -244,6 +415,18 @@ export default function IntangibleAssetManagement() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+
+    if (deleteConfirm.type === 'single') {
+      await handleDelete(deleteConfirm.asset);
+    } else {
+      await handleBulkDelete();
+    }
+
+    setDeleteConfirm(null);
   };
 
   if (isLoading) {
@@ -293,23 +476,32 @@ export default function IntangibleAssetManagement() {
           </Button>
         </div>
       </div>
-      {selectedAssetIds.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
-            Selected: {selectedAssetIds.length}
-          </span>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
+          Total: {totalAssetsCount}
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={handleExport}>
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
+        {selectedAssetIds.length > 0 && (
+          <>
+            <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
+              Selected: {selectedAssetIds.length}
+            </span>
           <Button
             type="button"
             variant="destructive"
             size="sm"
-            onClick={() => void handleBulkDelete()}
+            onClick={() => setDeleteConfirm({ type: 'bulk' })}
             disabled={submitting}
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete Selected ({selectedAssetIds.length})
           </Button>
-        </div>
-      )}
+          </>
+        )}
+      </div>
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
           <table className="min-w-[1660px] w-full text-sm">
@@ -323,20 +515,132 @@ export default function IntangibleAssetManagement() {
                     className="border-white data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0b2a59]"
                   />
                 </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Category</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Status</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Assigner Location</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Name</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Contact No</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Employment Type</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Role</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Emp Location</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Subscription Type</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Start Date</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Expiry Date</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Renewal Date</th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Amount Paid</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Assigner Name"
+                    options={columnFilterOptions.name}
+                    selected={columnFilters.name}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, name: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Category"
+                    options={columnFilterOptions.category}
+                    selected={columnFilters.category}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, category: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Status"
+                    options={columnFilterOptions.status}
+                    selected={columnFilters.status}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, status: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Assigner Location"
+                    options={columnFilterOptions.assignerLocation}
+                    selected={columnFilters.assignerLocation}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, assignerLocation: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Emp Name"
+                    options={columnFilterOptions.employeeName}
+                    selected={columnFilters.employeeName}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeName: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Emp Contact No"
+                    options={columnFilterOptions.employeeContactNumber}
+                    selected={columnFilters.employeeContactNumber}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeContactNumber: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Employment Type"
+                    options={columnFilterOptions.employmentType}
+                    selected={columnFilters.employmentType}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employmentType: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Role"
+                    options={columnFilterOptions.employeeRole}
+                    selected={columnFilters.employeeRole}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeRole: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Emp Location"
+                    options={columnFilterOptions.employeeLocation}
+                    selected={columnFilters.employeeLocation}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeLocation: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Subscription Type"
+                    options={columnFilterOptions.subscriptionType}
+                    selected={columnFilters.subscriptionType}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, subscriptionType: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Start Date"
+                    options={columnFilterOptions.validityStartDate}
+                    selected={columnFilters.validityStartDate}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, validityStartDate: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Expiry Date"
+                    options={columnFilterOptions.validityEndDate}
+                    selected={columnFilters.validityEndDate}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, validityEndDate: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Renewal Date"
+                    options={columnFilterOptions.renewalDate}
+                    selected={columnFilters.renewalDate}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, renewalDate: selected }))}
+                    dark
+                  />
+                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
+                  <ColumnFilter
+                    title="Amount Paid"
+                    options={columnFilterOptions.amountPaid}
+                    selected={columnFilters.amountPaid}
+                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, amountPaid: selected }))}
+                    dark
+                  />
+                </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
@@ -399,7 +703,7 @@ export default function IntangibleAssetManagement() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
-                                onClick={() => handleDelete(asset.id)}
+                                onClick={() => setDeleteConfirm({ type: 'single', asset })}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
@@ -417,14 +721,15 @@ export default function IntangibleAssetManagement() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Intangible Asset' : 'Add Intangible Asset'}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden border-0 p-0 sm:max-w-3xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="border-0 bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">{editingId ? 'Edit Intangible Asset' : 'Add Intangible Asset'}</DialogTitle>
+            <DialogDescription className="text-sm text-white/80">
               Fill in the digital asset details required for intangible asset management.
             </DialogDescription>
           </DialogHeader>
 
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Assigner Name</Label>
@@ -615,8 +920,9 @@ export default function IntangibleAssetManagement() {
               />
             </div>
           </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t bg-slate-50 px-6 py-5">
             <Button variant="outline" onClick={resetAndClose} disabled={submitting}>
               Cancel
             </Button>
@@ -627,6 +933,43 @@ export default function IntangibleAssetManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(deleteConfirm)} onOpenChange={(open) => (!open ? setDeleteConfirm(null) : undefined)}>
+        <AlertDialogContent className="border-0 p-0 sm:max-w-md">
+          <AlertDialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <AlertDialogTitle className="text-xl text-white">Confirm Delete</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-white/80">
+              {deleteConfirm?.type === 'single'
+                ? 'Are you sure you want to delete this intangible asset?'
+                : `Are you sure you want to delete ${selectedAssetIds.length} selected intangible asset${
+                    selectedAssetIds.length === 1 ? '' : 's'
+                  }?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 px-6 py-5 text-sm text-slate-600">
+            {deleteConfirm?.type === 'single' ? (
+              <div className="rounded-md border bg-slate-50 px-3 py-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Asset Name</span>
+                <p className="mt-1 font-semibold text-slate-900">{getAssetDisplayName(deleteConfirm.asset)}</p>
+              </div>
+            ) : null}
+            <p>You can restore the deleted asset from the undo option after deleting.</p>
+          </div>
+          <AlertDialogFooter className="border-t bg-slate-50 px-6 py-4">
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={submitting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
