@@ -342,12 +342,17 @@ export default function Dashboard() {
       ? 'Select Tangible or Intangible to inspect the related assets.'
       : assetListMeta[assetListFilter].description;
   const dialogSizeClass =
-    assetListFilter === 'company-owned'
-      ? 'flex h-[55vh] max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl'
-      : assetListFilter === 'vendor'
-        ? 'flex h-[55vh] max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl'
-      : 'flex h-[85vh] max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl';
-
+  assetListFilter === 'company-owned'
+    ? 'flex h-[55vh] max-w-md flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white'
+    : assetListFilter === 'vendor'
+      ? 'flex h-[55vh] max-w-lg flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white'
+      : assetListFilter === 'all'
+        ? 'flex h-[72vh] max-w-6xl flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white'
+      : assetListFilter === 'assigned'
+        ? 'flex h-[72vh] max-w-5xl flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white'
+      : assetListFilter === 'dead'
+        ? 'flex h-[72vh] max-w-5xl flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white'
+      : 'flex h-[72vh] max-w-2xl flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white';
   return (
     <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col gap-6 overflow-y-auto pr-1 pb-6 scrollbar-hide">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -364,7 +369,7 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {summaryCards.map((card) => (
           card.clickable ? (
             <button
@@ -589,9 +594,9 @@ export default function Dashboard() {
         }}
       >
         <DialogContent className={dialogSizeClass}>
-          <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-            <DialogTitle className="text-xl font-semibold text-slate-900">{assetListTitle}</DialogTitle>
-            <DialogDescription className="text-sm text-slate-600">{assetListDescription}</DialogDescription>
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl font-semibold text-white">{assetListTitle}</DialogTitle>
+            <DialogDescription className="text-sm text-white/80">{assetListDescription}</DialogDescription>
             {assetListFilter === 'all' || assetListFilter === 'available' || assetListFilter === 'assigned' ? (
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
@@ -609,12 +614,12 @@ export default function Dashboard() {
                       : assetListFilter === 'assigned'
                         ? assignedAssetsView
                         : totalAssetsView) === 'Tangible'
-                      ? 'border-blue-500 bg-blue-50 shadow-sm'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      ? 'border-white bg-white text-[#0b2a59] shadow-sm'
+                      : 'border-white/30 bg-white/10 text-white hover:border-white/60 hover:bg-white/15'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-slate-900">Tangible</p>
-                  <p className="text-xs text-slate-600">
+                  <p className="text-sm font-semibold">Tangible</p>
+                  <p className="text-xs opacity-80">
                     {assetListFilter === 'available'
                       ? availableTangibleAssets.length
                       : assetListFilter === 'assigned'
@@ -637,12 +642,12 @@ export default function Dashboard() {
                       : assetListFilter === 'assigned'
                         ? assignedAssetsView
                         : totalAssetsView) === 'Intangible'
-                      ? 'border-blue-500 bg-blue-50 shadow-sm'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      ? 'border-white bg-white text-[#0b2a59] shadow-sm'
+                      : 'border-white/30 bg-white/10 text-white hover:border-white/60 hover:bg-white/15'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-slate-900">Intangible</p>
-                  <p className="text-xs text-slate-600">
+                  <p className="text-sm font-semibold">Intangible</p>
+                  <p className="text-xs opacity-80">
                     {assetListFilter === 'available'
                       ? availableIntangibleAssets.length
                       : assetListFilter === 'assigned'
@@ -653,9 +658,9 @@ export default function Dashboard() {
               </div>
             ) : null}
           </DialogHeader>
-          <ScrollArea type="always" className="min-h-0 flex-1 bg-white px-6 pb-5 pt-0">
+          <ScrollArea type="always" className="min-h-0 flex-1 bg-slate-50 px-6 py-5">
             {assetListFilter === 'all' ? (
-              <Table className="table-fixed w-full">
+              <Table className="table-fixed w-full overflow-hidden rounded-lg bg-white text-sm shadow-sm">
                 <colgroup>
                   <col className="w-[24%]" />
                   <col className="w-[18%]" />
@@ -665,11 +670,11 @@ export default function Dashboard() {
                 </colgroup>
                 <TableHeader className="sticky top-0 z-20">
                   <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Assigner Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Category</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
+                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Assigner Name</TableHead>
+                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Category</TableHead>
+                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
+                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
+                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -764,53 +769,26 @@ export default function Dashboard() {
                 </TableBody>
               </Table>
             ) : assetListFilter === 'vendor' ? (
-              <Table className="table-fixed w-full">
-                <colgroup>
-                  <col className="w-[24%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[22%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[12%]" />
-                </colgroup>
-                <TableHeader className="sticky top-0 z-20">
-                  <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Category</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Vendor Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Amount</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleAssets.map((asset) => (
-                    <TableRow key={asset.id}>
-                      <TableCell>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-slate-900">{getAssetLabel(asset)}</p>
-                          <p className="text-xs text-muted-foreground">{asset.id}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => openCompanyAssetInfo(asset)}
-                          className="mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                          aria-label={`View details for ${getAssetLabel(asset)}`}
-                        >
-                          <Info className="h-4 w-4" />
-                        </button>
-                      </TableCell>
-                      <TableCell className="truncate">{asset.employeeName || asset.assignedTo || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.category || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.vendorName || asset.vendor || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.amount ?? asset.amountPaid ?? '-'}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={asset.status} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="grid gap-3 p-2">
+                {visibleAssets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-medium text-slate-900 shadow-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate">{getAssetLabel(asset)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openCompanyAssetInfo(asset)}
+                      className="ml-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      aria-label={`View details for ${getAssetLabel(asset)}`}
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             ) : assetListFilter === 'company-owned' ? (
               <div className="grid gap-3 p-2">
                 {visibleAssets.map((asset) => (
@@ -914,17 +892,17 @@ export default function Dashboard() {
       </Dialog>
 
       <Dialog open={companyAssetInfoOpen} onOpenChange={(open) => (open ? setCompanyAssetInfoOpen(true) : closeCompanyAssetInfo())}>
-        <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl">
-          <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-            <DialogTitle className="text-xl font-semibold text-slate-900">
-              {selectedCompanyAsset ? getAssetLabel(selectedCompanyAsset) : 'Asset Details'}
-            </DialogTitle>
-            <DialogDescription className="text-sm text-slate-600">
-              {selectedCompanyAssetType === 'Intangible'
-                ? 'Full information for the selected intangible asset.'
-                : 'Full information for the selected tangible asset.'}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden rounded-2xl border-0 p-0 shadow-2xl">
+         <DialogHeader className="border-b border-slate-200 bg-[#0b2a59] px-6 py-4">
+  <DialogTitle className="text-xl font-semibold text-white">
+    {selectedCompanyAsset ? getAssetLabel(selectedCompanyAsset) : 'Asset Details'}
+  </DialogTitle>
+  <DialogDescription className="text-sm text-white/80">
+    {selectedCompanyAssetType === 'Intangible'
+      ? 'Full information for the selected intangible asset.'
+      : 'Full information for the selected tangible asset.'}
+  </DialogDescription>
+</DialogHeader>
 
           <ScrollArea className="max-h-[calc(85vh-6rem)] px-6 py-5">
             {selectedCompanyAsset ? (
