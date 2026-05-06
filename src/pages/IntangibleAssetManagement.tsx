@@ -949,8 +949,8 @@ export default function IntangibleAssetManagement() {
           <div className="space-y-3 px-6 py-5 text-sm text-slate-600">
             {deleteConfirm?.type === 'single' ? (
               <div className="rounded-md border bg-slate-50 px-3 py-2">
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Asset Name</span>
-                <p className="mt-1 font-semibold text-slate-900">{getAssetDisplayName(deleteConfirm.asset)}</p>
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Category</span>
+                <p className="mt-1 font-semibold text-slate-900">{deleteConfirm.asset.category || 'Software License'}</p>
               </div>
             ) : null}
             <p>You can restore the deleted asset from the undo option after deleting.</p>
