@@ -31,6 +31,11 @@ const emptyEmployeeForm = (): EmployeeFormState => ({
   role: '',
   location: '',
 });
+const CONTACT_NUMBER_DIGIT_LIMIT = 10;
+
+function formatContactNumber(value: string) {
+  return value.replace(/\D/g, '').slice(0, CONTACT_NUMBER_DIGIT_LIMIT);
+}
 const DEAD_STATUS_KEYS = new Set([
   'DEAD',
   'DAMAGED',
@@ -255,11 +260,24 @@ export default function Dashboard() {
     setEmployeeForm(emptyEmployeeForm());
   };
 
+  const handleEmployeeContactChange = (value: string) => {
+    setEmployeeForm((prev) => ({ ...prev, contactNumber: formatContactNumber(value) }));
+  };
+
   const handleEmployeeSubmit = async () => {
     if (!employeeForm.name.trim() || !employeeForm.contactNumber.trim() || !employeeForm.role.trim() || !employeeForm.location.trim()) {
       toast({
         title: 'Missing fields',
         description: 'Please enter employee name, contact number, role, and location.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (employeeForm.contactNumber.length !== CONTACT_NUMBER_DIGIT_LIMIT) {
+      toast({
+        title: 'Invalid contact number',
+        description: 'Contact number must be exactly 10 digits.',
         variant: 'destructive',
       });
       return;
@@ -526,7 +544,9 @@ export default function Dashboard() {
               <Input
                 id="employee-contact"
                 value={employeeForm.contactNumber}
-                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, contactNumber: e.target.value }))}
+                onChange={(e) => handleEmployeeContactChange(e.target.value)}
+                inputMode="numeric"
+                maxLength={CONTACT_NUMBER_DIGIT_LIMIT}
                 placeholder="Enter contact number"
               />
             </div>
