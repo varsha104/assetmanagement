@@ -26,7 +26,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToastAction } from '@/components/ui/toast';
-import { StatusBadge } from '@/components/StatusBadges';
 import { Download, Loader2, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
@@ -34,37 +33,91 @@ import { Asset } from '@/types';
 
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
 const INTANGIBLE_CATEGORIES = ['Software License', 'Cloud Subscription'] as const;
+const INTANGIBLE_AMOUNT_CURRENCY_STORAGE_KEY = 'src_23rasset_intangible_amount_currencies';
+type CurrencyCode = 'USD' | 'INR';
+
+function loadAmountCurrencies(): Record<string, CurrencyCode> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(INTANGIBLE_AMOUNT_CURRENCY_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.entries(parsed).reduce<Record<string, CurrencyCode>>((acc, [key, value]) => {
+      if (value === 'USD' || value === 'INR') acc[key] = value;
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+function persistAmountCurrencies(value: Record<string, CurrencyCode>) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(INTANGIBLE_AMOUNT_CURRENCY_STORAGE_KEY, JSON.stringify(value));
+}
+
+function buildAmountCurrencySignature(input: {
+  name?: string;
+  category?: string;
+  assignerLocation?: string;
+  subscriptionType?: string;
+  validityStartDate?: string;
+  validityEndDate?: string;
+  renewalDate?: string;
+  amountPaid?: string | number | null;
+}) {
+  return [
+    input.name || '',
+    input.category || '',
+    input.assignerLocation || '',
+    input.subscriptionType || '',
+    input.validityStartDate || '',
+    input.validityEndDate || '',
+    input.renewalDate || '',
+    input.amountPaid == null ? '' : String(input.amountPaid),
+  ].join('|');
+}
+
+function isValidUsdAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(trimmed);
+}
+
+function isValidInrAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^(\d+|\d{1,3}(,\d{2})*,\d{3})(\.\d{1,2})?$/.test(trimmed);
+}
+
+function parseCurrencyAmount(value: string, currency: CurrencyCode) {
+  const trimmed = value.trim();
+  const isValid = currency === 'USD' ? isValidUsdAmount(trimmed) : isValidInrAmount(trimmed);
+  if (!isValid) return null;
+
+  const normalized = Number(trimmed.replace(/,/g, ''));
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
 type IntangibleFilterKey =
   | 'name'
   | 'category'
-  | 'status'
   | 'assignerLocation'
-  | 'employeeName'
-  | 'employeeContactNumber'
-  | 'employmentType'
-  | 'employeeRole'
-  | 'employeeLocation'
   | 'subscriptionType'
   | 'validityStartDate'
   | 'validityEndDate'
-  | 'renewalDate'
-  | 'amountPaid';
+  | 'renewalDate';
 
 const INTANGIBLE_FILTER_KEYS: IntangibleFilterKey[] = [
   'name',
   'category',
-  'status',
   'assignerLocation',
-  'employeeName',
-  'employeeContactNumber',
-  'employmentType',
-  'employeeRole',
-  'employeeLocation',
   'subscriptionType',
   'validityStartDate',
   'validityEndDate',
   'renewalDate',
-  'amountPaid',
 ];
 
 function normalizeAssignerLocation(value?: string) {
@@ -72,20 +125,14 @@ function normalizeAssignerLocation(value?: string) {
 }
 
 const INTANGIBLE_EXPORT_COLUMNS: CsvColumn<Asset>[] = [
-  { header: 'Assigner Name', value: (asset) => asset.name },
+  { header: 'Name', value: (asset) => asset.name },
   { header: 'Category', value: (asset) => asset.category },
-  { header: 'Status', value: (asset) => asset.status },
-  { header: 'Assigner Location', value: (asset) => asset.assignerLocation },
-  { header: 'Employee Name', value: (asset) => asset.employeeName || asset.assignedTo },
-  { header: 'Employee Contact Number', value: (asset) => asset.employeeContactNumber },
-  { header: 'Employment Type', value: (asset) => asset.employmentType },
-  { header: 'Role', value: (asset) => asset.employeeRole },
-  { header: 'Employee Location', value: (asset) => asset.employeeLocation },
+  { header: 'Location', value: (asset) => asset.assignerLocation },
   { header: 'Subscription Type', value: (asset) => asset.subscriptionType },
   { header: 'Start Date', value: (asset) => asset.validityStartDate || asset.purchaseDate },
   { header: 'Expiry Date', value: (asset) => asset.validityEndDate || asset.warrantyPeriod },
   { header: 'Renewal Date', value: (asset) => asset.renewalDate },
-  { header: 'Amount Paid', value: (asset) => asset.amountPaid },
+  { header: 'Amount (USD or INR)', value: (asset) => asset.amountPaid },
 ];
 
 type IntangibleFormState = {
@@ -104,6 +151,7 @@ type IntangibleFormState = {
   validityStartDate: string;
   validityEndDate: string;
   renewalDate: string;
+  amountCurrency: CurrencyCode;
   amountPaid: string;
 };
 
@@ -128,15 +176,15 @@ const emptyForm = (): IntangibleFormState => ({
   validityStartDate: '',
   validityEndDate: '',
   renewalDate: '',
+  amountCurrency: 'INR',
   amountPaid: '',
 });
 
 export default function IntangibleAssetManagement() {
   const { user } = useAuth();
-  const { assets, addAsset, updateAsset, deleteAsset, restoreDeletedAsset, employees, isLoading } = useData();
+  const { assets, addAsset, updateAsset, deleteAsset, restoreDeletedAsset, isLoading } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'Available' | 'Assigned'>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -145,41 +193,50 @@ export default function IntangibleAssetManagement() {
   const [columnFilters, setColumnFilters] = useState<Record<IntangibleFilterKey, string[]>>({
     name: [],
     category: [],
-    status: [],
     assignerLocation: [],
-    employeeName: [],
-    employeeContactNumber: [],
-    employmentType: [],
-    employeeRole: [],
-    employeeLocation: [],
     subscriptionType: [],
     validityStartDate: [],
     validityEndDate: [],
     renewalDate: [],
-    amountPaid: [],
   });
   const [form, setForm] = useState<IntangibleFormState>(emptyForm());
-  const employeeDetailsDisabled = form.status === 'Available';
+  const [amountCurrencies, setAmountCurrencies] = useState<Record<string, CurrencyCode>>(() => loadAmountCurrencies());
 
   const intangibleAssets = assets.filter((asset) => asset.type === 'Intangible');
-  const getEmployeeForAsset = (asset: Asset) =>
-    employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
-  const getEmployeeRoleForAsset = (asset: Asset) => asset.employeeRole || getEmployeeForAsset(asset)?.role || '';
+  const getAmountCurrency = (asset: Asset): CurrencyCode => {
+    const idKey = `id:${asset.id}`;
+    const signatureKey = `sig:${buildAmountCurrencySignature({
+      name: asset.name,
+      category: asset.category,
+      assignerLocation: asset.assignerLocation,
+      subscriptionType: asset.subscriptionType,
+      validityStartDate: asset.validityStartDate || asset.purchaseDate,
+      validityEndDate: asset.validityEndDate || asset.warrantyPeriod,
+      renewalDate: asset.renewalDate,
+      amountPaid: asset.amountPaid,
+    })}`;
+
+    const assetCurrency = asset.amountCurrency === 'USD' || asset.amountCurrency === 'INR' ? asset.amountCurrency : null;
+    return assetCurrency || amountCurrencies[idKey] || amountCurrencies[signatureKey] || 'INR';
+  };
+  const formatAmountPaid = (asset: Asset) => {
+    if (asset.amountPaid == null) return '—';
+
+    const currency = getAmountCurrency(asset);
+    return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: Number.isInteger(asset.amountPaid) ? 0 : 2,
+    }).format(asset.amountPaid);
+  };
   const intangibleFilterAccessors: Record<IntangibleFilterKey, (asset: Asset) => string> = {
     name: (asset) => asset.name || '—',
     category: (asset) => asset.category || '—',
-    status: (asset) => asset.status || '—',
     assignerLocation: (asset) => asset.assignerLocation || '—',
-    employeeName: (asset) => asset.employeeName || asset.assignedTo || '—',
-    employeeContactNumber: (asset) => asset.employeeContactNumber || '—',
-    employmentType: (asset) => asset.employmentType || '—',
-    employeeRole: (asset) => getEmployeeRoleForAsset(asset) || '—',
-    employeeLocation: (asset) => asset.employeeLocation || '—',
     subscriptionType: (asset) => asset.subscriptionType || '—',
     validityStartDate: (asset) => asset.validityStartDate || asset.purchaseDate || '—',
     validityEndDate: (asset) => asset.validityEndDate || asset.warrantyPeriod || '—',
     renewalDate: (asset) => asset.renewalDate || '—',
-    amountPaid: (asset) => (asset.amountPaid != null ? String(asset.amountPaid) : '—'),
   };
   const columnFilterOptions = useMemo(
     () =>
@@ -190,22 +247,21 @@ export default function IntangibleAssetManagement() {
         },
         {} as Record<IntangibleFilterKey, string[]>,
       ),
-    [intangibleAssets, employees],
+    [intangibleAssets],
   );
 
   const filteredAssets = intangibleAssets.filter((asset) => {
     const matchesSearch =
       asset.name.toLowerCase().includes(search.toLowerCase()) ||
       (asset.subscriptionType || '').toLowerCase().includes(search.toLowerCase()) ||
-      (asset.employeeName || asset.assignedTo || '').toLowerCase().includes(search.toLowerCase()) ||
+      (asset.category || '').toLowerCase().includes(search.toLowerCase()) ||
       (asset.assignerLocation || '').toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
     const matchesColumnFilters = INTANGIBLE_FILTER_KEYS.every((key) => {
       const selectedValues = columnFilters[key];
       if (selectedValues.length === 0) return true;
       return selectedValues.includes(intangibleFilterAccessors[key](asset));
     });
-    return matchesSearch && matchesStatus && matchesColumnFilters;
+    return matchesSearch && matchesColumnFilters;
   });
   const filteredAssetIds = filteredAssets.map((asset) => asset.id);
   const totalAssetsCount = intangibleAssets.length;
@@ -253,7 +309,17 @@ export default function IntangibleAssetManagement() {
     const normalizedCategory = INTANGIBLE_CATEGORIES.includes(category as (typeof INTANGIBLE_CATEGORIES)[number])
       ? category
       : 'Other';
-    const matchedEmployee = employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
+    const idKey = `id:${asset.id}`;
+    const signatureKey = `sig:${buildAmountCurrencySignature({
+      name: asset.name,
+      category: asset.category,
+      assignerLocation: asset.assignerLocation,
+      subscriptionType: asset.subscriptionType,
+      validityStartDate: asset.validityStartDate || asset.purchaseDate,
+      validityEndDate: asset.validityEndDate || asset.warrantyPeriod,
+      renewalDate: asset.renewalDate,
+      amountPaid: asset.amountPaid,
+    })}`;
     setEditingId(asset.id);
     setForm({
       name: asset.name || '',
@@ -261,19 +327,23 @@ export default function IntangibleAssetManagement() {
       customCategory: normalizedCategory === 'Other' ? category : '',
       status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
       assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
-      employeeId: matchedEmployee?.id || '',
+      employeeId: '',
       employeeName: asset.employeeName || asset.assignedTo || '',
-      employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
+      employeeContactNumber: asset.employeeContactNumber || '',
       employmentType:
         asset.status === 'Assigned' && asset.employmentType
           ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
           : '',
-      employeeRole: getEmployeeRoleForAsset(asset),
-      employeeLocation: matchedEmployee?.location || asset.employeeLocation || '',
+      employeeRole: asset.employeeRole || '',
+      employeeLocation: asset.employeeLocation || '',
       subscriptionType: asset.subscriptionType || '',
       validityStartDate: asset.validityStartDate || asset.purchaseDate || '',
       validityEndDate: asset.validityEndDate || asset.warrantyPeriod || '',
       renewalDate: asset.renewalDate || '',
+      amountCurrency:
+        asset.amountCurrency === 'USD' || asset.amountCurrency === 'INR'
+          ? asset.amountCurrency
+          : amountCurrencies[idKey] || amountCurrencies[signatureKey] || 'INR',
       amountPaid: asset.amountPaid != null ? String(asset.amountPaid) : '',
     });
     setDialogOpen(true);
@@ -296,8 +366,35 @@ export default function IntangibleAssetManagement() {
       return;
     }
 
+    const parsedAmount = parseCurrencyAmount(form.amountPaid, form.amountCurrency);
+    if (parsedAmount === null) {
+      toast({
+        title: 'Invalid amount format',
+        description:
+          form.amountCurrency === 'USD'
+            ? 'Use a valid USD amount format.'
+            : 'Use a valid INR amount format.',
+        // description:
+        //   form.amountCurrency === 'USD'
+        //     ? 'Enter the amount in USD format, for example 1,200.50 or 1200.50.'
+        //     : 'Enter the amount in INR format, for example 1,20,000.50 or 120000.50.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const signatureKey = `sig:${buildAmountCurrencySignature({
+        name: form.name,
+        category: resolvedCategory,
+        assignerLocation: form.assignerLocation,
+        subscriptionType: form.subscriptionType,
+        validityStartDate: form.validityStartDate,
+        validityEndDate: form.validityEndDate,
+        renewalDate: form.renewalDate,
+        amountPaid: form.amountPaid,
+      })}`;
       const payload = {
         name: form.name,
         type: 'Intangible' as const,
@@ -318,15 +415,30 @@ export default function IntangibleAssetManagement() {
           validityStartDate: form.validityStartDate,
           validityEndDate: form.validityEndDate,
           renewalDate: form.renewalDate,
-        amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
+        amountPaid: parsedAmount,
+        amountCurrency: form.amountCurrency,
+        amount_currency: form.amountCurrency,
         vendor: '',
         licenseKey: '',
       };
 
       if (editingId) {
+        const nextAmountCurrencies = {
+          ...amountCurrencies,
+          [`id:${editingId}`]: form.amountCurrency,
+          [signatureKey]: form.amountCurrency,
+        };
+        setAmountCurrencies(nextAmountCurrencies);
+        persistAmountCurrencies(nextAmountCurrencies);
         await updateAsset(editingId, payload);
         toast({ title: 'Intangible asset updated' });
       } else {
+        const nextAmountCurrencies = {
+          ...amountCurrencies,
+          [signatureKey]: form.amountCurrency,
+        };
+        setAmountCurrencies(nextAmountCurrencies);
+        persistAmountCurrencies(nextAmountCurrencies);
         await addAsset(payload);
         toast({ title: 'Intangible asset added' });
       }
@@ -455,21 +567,11 @@ export default function IntangibleAssetManagement() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, subscription, employee, or location"
+            placeholder="Search by name, category, subscription, or location"
             className="h-11 pl-10"
           />
         </div>
         <div className="flex w-full gap-2 md:w-auto">
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'Available' | 'Assigned')}>
-            <SelectTrigger className="h-11 w-full md:w-48">
-              <SelectValue placeholder="Filter status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="Available">Available</SelectItem>
-              <SelectItem value="Assigned">Assigned</SelectItem>
-            </SelectContent>
-          </Select>
           <Button onClick={openAdd} className="w-full md:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Add Intangible Asset
@@ -504,7 +606,7 @@ export default function IntangibleAssetManagement() {
       </div>
       <div className="overflow-hidden rounded-xl border bg-white">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
-          <table className="min-w-[1660px] w-full text-sm">
+          <table className="min-w-[1080px] w-full text-sm">
             <thead className="sticky top-0 z-20 bg-[#0b2a59] text-white">
               <tr>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
@@ -517,7 +619,7 @@ export default function IntangibleAssetManagement() {
                 </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
                   <ColumnFilter
-                    title="Assigner Name"
+                    title="Name"
                     options={columnFilterOptions.name}
                     selected={columnFilters.name}
                     onChange={(selected) => setColumnFilters((prev) => ({ ...prev, name: selected }))}
@@ -535,64 +637,10 @@ export default function IntangibleAssetManagement() {
                 </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
                   <ColumnFilter
-                    title="Status"
-                    options={columnFilterOptions.status}
-                    selected={columnFilters.status}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, status: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Assigner Location"
+                    title="Location"
                     options={columnFilterOptions.assignerLocation}
                     selected={columnFilters.assignerLocation}
                     onChange={(selected) => setColumnFilters((prev) => ({ ...prev, assignerLocation: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Emp Name"
-                    options={columnFilterOptions.employeeName}
-                    selected={columnFilters.employeeName}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeName: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Emp Contact No"
-                    options={columnFilterOptions.employeeContactNumber}
-                    selected={columnFilters.employeeContactNumber}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeContactNumber: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Employment Type"
-                    options={columnFilterOptions.employmentType}
-                    selected={columnFilters.employmentType}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employmentType: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Role"
-                    options={columnFilterOptions.employeeRole}
-                    selected={columnFilters.employeeRole}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeRole: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Emp Location"
-                    options={columnFilterOptions.employeeLocation}
-                    selected={columnFilters.employeeLocation}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, employeeLocation: selected }))}
                     dark
                   />
                 </th>
@@ -632,22 +680,14 @@ export default function IntangibleAssetManagement() {
                     dark
                   />
                 </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">
-                  <ColumnFilter
-                    title="Amount Paid"
-                    options={columnFilterOptions.amountPaid}
-                    selected={columnFilters.amountPaid}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, amountPaid: selected }))}
-                    dark
-                  />
-                </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold">Amount (USD or INR)</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
               <tbody>
                 {filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
                       No intangible assets found.
                     </td>
                   </tr>
@@ -667,20 +707,12 @@ export default function IntangibleAssetManagement() {
                         </div>
                       </td>
                       <td className="px-4 py-4">{asset.category || '—'}</td>
-                      <td className="px-4 py-4">
-                        <StatusBadge status={asset.status} />
-                      </td>
                       <td className="px-4 py-4">{asset.assignerLocation || '—'}</td>
-                      <td className="px-4 py-4">{asset.employeeName || asset.assignedTo || '—'}</td>
-                      <td className="px-4 py-4">{asset.employeeContactNumber || '—'}</td>
-                      <td className="px-4 py-4">{asset.employmentType || '—'}</td>
-                      <td className="px-4 py-4">{getEmployeeRoleForAsset(asset) || '—'}</td>
-                      <td className="px-4 py-4">{asset.employeeLocation || '—'}</td>
                       <td className="px-4 py-4">{asset.subscriptionType || '—'}</td>
                       <td className="px-4 py-4">{asset.validityStartDate || asset.purchaseDate || '—'}</td>
                       <td className="px-4 py-4">{asset.validityEndDate || asset.warrantyPeriod || '—'}</td>
                       <td className="px-4 py-4">{asset.renewalDate || '—'}</td>
-                      <td className="px-4 py-4">{asset.amountPaid != null ? asset.amountPaid : '—'}</td>
+                      <td className="px-4 py-4">{formatAmountPaid(asset)}</td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-end">
                           <DropdownMenu>
@@ -732,7 +764,7 @@ export default function IntangibleAssetManagement() {
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Assigner Name</Label>
+              <Label>Name</Label>
               <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
@@ -771,31 +803,7 @@ export default function IntangibleAssetManagement() {
               ) : null}
             </div>
             <div className="space-y-2">
-              <Label>Asset Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    status: value as 'Available' | 'Assigned',
-                    employeeId: value === 'Assigned' ? prev.employeeId : '',
-                    employeeName: value === 'Assigned' ? prev.employeeName : '',
-                    employeeContactNumber: value === 'Assigned' ? prev.employeeContactNumber : '',
-                    employmentType: value === 'Assigned' ? prev.employmentType : '',
-                    employeeRole: value === 'Assigned' ? prev.employeeRole : '',
-                    employeeLocation: value === 'Assigned' ? prev.employeeLocation : '',
-                  }))
-                }
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Available">Available</SelectItem>
-                  <SelectItem value="Assigned">Assigned</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Assigner Location</Label>
+              <Label>Location</Label>
               <Select
                 value={form.assignerLocation}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, assignerLocation: value }))}
@@ -813,77 +821,6 @@ export default function IntangibleAssetManagement() {
               </Select>
             </div>
               <div className="space-y-2">
-                <Label>Employee Name</Label>
-                <Select
-                  value={form.employeeId || undefined}
-                  onValueChange={(value) => {
-                    const selectedEmployee = employees.find((employee) => employee.id === value);
-
-                    setForm((prev) => ({
-                      ...prev,
-                      employeeId: value,
-                      employeeName: selectedEmployee?.name || '',
-                      employeeContactNumber: selectedEmployee?.phoneNumber || '',
-                      employmentType: (selectedEmployee?.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
-                      employeeRole: selectedEmployee?.role || '',
-                      employeeLocation: selectedEmployee?.location || '',
-                    }));
-                  }}
-                  disabled={employeeDetailsDisabled}
-                >
-                  <SelectTrigger disabled={employeeDetailsDisabled}>
-                    <SelectValue placeholder={employees.length ? 'Select employee' : 'No employees available'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Employee Contact Number</Label>
-                <Input
-                  value={form.employeeContactNumber}
-                  onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))}
-                  disabled={employeeDetailsDisabled}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Employment Type</Label>
-                <Select
-                  value={form.employmentType || undefined}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, employmentType: value as 'Permanent' | 'Contract' }))}
-                  disabled={employeeDetailsDisabled}
-                >
-                  <SelectTrigger disabled={employeeDetailsDisabled}>
-                    <SelectValue placeholder="Select employment type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Permanent">Permanent</SelectItem>
-                    <SelectItem value="Contract">Contract</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Input
-                  value={form.employeeRole}
-                  onChange={(e) => setForm((prev) => ({ ...prev, employeeRole: e.target.value }))}
-                  disabled={employeeDetailsDisabled}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Employee Location</Label>
-                <Input
-                  value={form.employeeLocation}
-                  onChange={(e) => setForm((prev) => ({ ...prev, employeeLocation: e.target.value }))}
-                  disabled={employeeDetailsDisabled}
-                />
-              </div>
-              <div className="space-y-2">
                   <Label>Subscription Type</Label>
                   <Select
                     value={form.subscriptionType}
@@ -894,6 +831,7 @@ export default function IntangibleAssetManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Monthly">Monthly</SelectItem>
+                    <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
                     <SelectItem value="Annually">Annually</SelectItem>
                   </SelectContent>
                 </Select>
@@ -911,13 +849,32 @@ export default function IntangibleAssetManagement() {
               <Input type="date" value={form.renewalDate} onChange={(e) => setForm((prev) => ({ ...prev, renewalDate: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>Amount Paid</Label>
-              <Input
-                type="number"
-                min="0"
-                value={form.amountPaid}
-                onChange={(e) => setForm((prev) => ({ ...prev, amountPaid: e.target.value }))}
-              />
+              <Label>Amount (USD or INR)</Label>
+              <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-3">
+                <Select
+                  value={form.amountCurrency}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, amountCurrency: value as 'USD' | 'INR' }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="INR">INR</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={
+                    form.amountCurrency === 'USD'
+                      ? 'Enter amount like 1,200.50'
+                      : 'Enter amount like 1,20,000.50'
+                  }
+                  value={form.amountPaid}
+                  onChange={(e) => setForm((prev) => ({ ...prev, amountPaid: e.target.value }))}
+                />
+              </div>
             </div>
           </div>
           </div>

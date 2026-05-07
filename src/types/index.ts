@@ -29,6 +29,7 @@ export interface Asset {
   employeeContactNumber?: string;
   employmentType?: 'Permanent' | 'Contract' | string;
   employeeRole?: string;
+  employeeEmail?: string;
   assignerName?: string;
   ownership?: 'Company-Owned' | 'Vendor Asset' | string;
   // Tangible-specific
@@ -50,6 +51,7 @@ export interface Asset {
   validityStartDate?: string;
   validityEndDate?: string;
   renewalDate?: string;
+  amountCurrency?: 'USD' | 'INR' | string;
   amountPaid?: number;
 }
 

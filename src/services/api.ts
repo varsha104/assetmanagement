@@ -236,6 +236,8 @@ export interface IntangibleAsset {
     employee_role?: string;
     employeeRole?: string;
     employee_location?: string;
+    amount_currency?: string;
+    amountCurrency?: string;
     amount_paid?: number;
 }
 

@@ -147,6 +147,7 @@ type TangibleFormState = {
   employeeId: string;
   employeeName: string;
   employeeContactNumber: string;
+  employeeEmail: string;
   employmentType: '' | 'Permanent' | 'Contract';
   employeeRole: string;
   employeeLocation: string;
@@ -173,6 +174,7 @@ const emptyForm = (): TangibleFormState => ({
   employeeId: '',
   employeeName: '',
   employeeContactNumber: '',
+  employeeEmail: '',
   employmentType: '',
   employeeRole: '',
   employeeLocation: '',
@@ -217,6 +219,13 @@ export default function TangibleAssetManagement() {
   const employeeDetailsDisabled = form.status === 'Available';
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
   const employeeOptions = employees;
+  const getEmployeeEmailForAsset = (asset?: Asset | null) => {
+    if (!asset) return '—';
+    if (asset.employeeEmail) return asset.employeeEmail;
+
+    const matchedEmployee = employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
+    return matchedEmployee?.email || '—';
+  };
   const columnFilterOptions = useMemo(
     () =>
       TANGIBLE_FILTER_KEYS.reduce(
@@ -303,6 +312,7 @@ export default function TangibleAssetManagement() {
       employeeId: matchedEmployee?.id || '',
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
+      employeeEmail: matchedEmployee?.email || asset.employeeEmail || '',
       employmentType:
         asset.status === 'Assigned' && asset.employmentType
           ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
@@ -363,6 +373,7 @@ export default function TangibleAssetManagement() {
         ownership: form.ownership,
         employeeName: form.status === 'Assigned' ? form.employeeName : '',
         employeeContactNumber: form.status === 'Assigned' ? form.employeeContactNumber : '',
+        employeeEmail: form.status === 'Assigned' ? form.employeeEmail : '',
         employmentType: form.status === 'Assigned' ? form.employmentType : '',
         employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
         employeeLocation: form.status === 'Assigned' ? form.employeeLocation : '',
@@ -905,15 +916,16 @@ export default function TangibleAssetManagement() {
               <Select
                 value={form.status}
                 onValueChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    status: value as 'Available' | 'Assigned',
-                    employeeId: value === 'Assigned' ? prev.employeeId : '',
-                    employeeName: value === 'Assigned' ? prev.employeeName : '',
-                    employeeContactNumber: value === 'Assigned' ? prev.employeeContactNumber : '',
-                    employmentType: value === 'Assigned' ? prev.employmentType : '',
-                    employeeRole: value === 'Assigned' ? prev.employeeRole : '',
-                    employeeLocation: value === 'Assigned' ? prev.employeeLocation : '',
+                    setForm((prev) => ({
+                      ...prev,
+                      status: value as 'Available' | 'Assigned',
+                      employeeId: value === 'Assigned' ? prev.employeeId : '',
+                      employeeName: value === 'Assigned' ? prev.employeeName : '',
+                      employeeContactNumber: value === 'Assigned' ? prev.employeeContactNumber : '',
+                      employeeEmail: value === 'Assigned' ? prev.employeeEmail : '',
+                      employmentType: value === 'Assigned' ? prev.employmentType : '',
+                      employeeRole: value === 'Assigned' ? prev.employeeRole : '',
+                      employeeLocation: value === 'Assigned' ? prev.employeeLocation : '',
                   }))
                 }
               >
@@ -954,6 +966,7 @@ export default function TangibleAssetManagement() {
                       employeeId: value,
                       employeeName: selectedEmployee?.name || '',
                       employeeContactNumber: selectedEmployee?.phoneNumber || '',
+                      employeeEmail: selectedEmployee?.email || '',
                       employmentType: (selectedEmployee?.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
                       employeeRole: selectedEmployee?.role || '',
                       employeeLocation: selectedEmployee?.location || '',
@@ -979,6 +992,16 @@ export default function TangibleAssetManagement() {
                   value={form.employeeContactNumber}
                   onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))}
                   disabled={employeeDetailsDisabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Emp Mail</Label>
+                <Input
+                  type="email"
+                  value={form.employeeEmail}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeEmail: e.target.value }))}
+                  disabled={employeeDetailsDisabled}
+                  placeholder="Employee email"
                 />
               </div>
               <div className="space-y-2">
@@ -1096,6 +1119,10 @@ export default function TangibleAssetManagement() {
             <div className="space-y-1">
               <Label>Emp Contact No</Label>
               <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeContactNumber || '—'}</p>
+            </div>
+            <div className="space-y-1">
+              <Label>Emp Mail</Label>
+              <p className="text-sm text-slate-700">{getEmployeeEmailForAsset(employeeInfoAsset)}</p>
             </div>
             <div className="space-y-1">
               <Label>Role</Label>

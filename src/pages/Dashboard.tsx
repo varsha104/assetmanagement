@@ -19,14 +19,18 @@ const EMPLOYEE_LOCATIONS = ['Hyderabad', 'Banglore', 'Vijayawada'] as const;
 type AssetListFilter = 'all' | 'company-owned' | 'vendor' | 'available' | 'assigned' | 'dead';
 type EmployeeFormState = {
   name: string;
-  contactNumber: string;
+  email: string;
+  whatsappNumber: string;
+  alternateNumber: string;
   employmentType: 'Permanent' | 'Contract';
   role: string;
   location: string;
 };
 const emptyEmployeeForm = (): EmployeeFormState => ({
   name: '',
-  contactNumber: '',
+  email: '',
+  whatsappNumber: '',
+  alternateNumber: '',
   employmentType: 'Permanent',
   role: '',
   location: '',
@@ -260,24 +264,37 @@ export default function Dashboard() {
     setEmployeeForm(emptyEmployeeForm());
   };
 
-  const handleEmployeeContactChange = (value: string) => {
-    setEmployeeForm((prev) => ({ ...prev, contactNumber: formatContactNumber(value) }));
+  const handleEmployeeWhatsAppChange = (value: string) => {
+    setEmployeeForm((prev) => ({ ...prev, whatsappNumber: formatContactNumber(value) }));
+  };
+
+  const handleEmployeeAlternateNumberChange = (value: string) => {
+    setEmployeeForm((prev) => ({ ...prev, alternateNumber: formatContactNumber(value) }));
   };
 
   const handleEmployeeSubmit = async () => {
-    if (!employeeForm.name.trim() || !employeeForm.contactNumber.trim() || !employeeForm.role.trim() || !employeeForm.location.trim()) {
+    if (!employeeForm.name.trim() || !employeeForm.whatsappNumber.trim() || !employeeForm.role.trim() || !employeeForm.location.trim()) {
       toast({
         title: 'Missing fields',
-        description: 'Please enter employee name, contact number, role, and location.',
+        description: 'Please enter employee name, WhatsApp number, role, and location.',
         variant: 'destructive',
       });
       return;
     }
 
-    if (employeeForm.contactNumber.length !== CONTACT_NUMBER_DIGIT_LIMIT) {
+    if (employeeForm.whatsappNumber.length !== CONTACT_NUMBER_DIGIT_LIMIT) {
       toast({
-        title: 'Invalid contact number',
-        description: 'Contact number must be exactly 10 digits.',
+        title: 'Invalid WhatsApp number',
+        description: 'WhatsApp number must be exactly 10 digits.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (employeeForm.alternateNumber.trim() && employeeForm.alternateNumber.length !== CONTACT_NUMBER_DIGIT_LIMIT) {
+      toast({
+        title: 'Invalid alternate number',
+        description: 'Alternate number must be exactly 10 digits when provided.',
         variant: 'destructive',
       });
       return;
@@ -287,7 +304,9 @@ export default function Dashboard() {
     try {
       await addEmployee({
         name: employeeForm.name,
-        phoneNumber: employeeForm.contactNumber,
+        email: employeeForm.email,
+        phoneNumber: employeeForm.whatsappNumber,
+        alternateNumber: employeeForm.alternateNumber,
         employmentType: employeeForm.employmentType,
         role: employeeForm.role,
         location: employeeForm.location,
@@ -445,7 +464,9 @@ export default function Dashboard() {
                 <TableRow>
                   <TableHead className="font-bold" >Emp Name</TableHead>
                   <TableHead className="font-bold">Role</TableHead>
-                  <TableHead className="font-bold">Contact No</TableHead>
+                  <TableHead className="font-bold">Emp Mail</TableHead>
+                  <TableHead className="font-bold">WhatsApp No</TableHead>
+                  <TableHead className="font-bold">Alternate No</TableHead>
                   <TableHead className="font-bold">Employment Type</TableHead>
                   <TableHead className="font-bold">Location</TableHead>
                 </TableRow>
@@ -453,7 +474,7 @@ export default function Dashboard() {
               <TableBody>
                 {employeeRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
                       No employees added yet.
                     </TableCell>
                   </TableRow>
@@ -462,7 +483,9 @@ export default function Dashboard() {
                     <TableRow key={employee.id}>
                       <TableCell className="font-medium">{employee.name}</TableCell>
                       <TableCell>{employee.role || '—'}</TableCell>
+                      <TableCell>{employee.email || '—'}</TableCell>
                       <TableCell>{employee.phoneNumber || '—'}</TableCell>
+                      <TableCell>{employee.alternateNumber || '—'}</TableCell>
                       <TableCell>{employee.employmentType || '—'}</TableCell>
                       <TableCell>{employee.location || '—'}</TableCell>
                     </TableRow>
@@ -539,15 +562,25 @@ export default function Dashboard() {
                 placeholder="Enter employee name"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="employee-contact">Contact Number</Label>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="employee-email">Email</Label>
               <Input
-                id="employee-contact"
-                value={employeeForm.contactNumber}
-                onChange={(e) => handleEmployeeContactChange(e.target.value)}
+                id="employee-email"
+                type="email"
+                value={employeeForm.email}
+                onChange={(e) => setEmployeeForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="Enter email address"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-whatsapp-number">WhatsApp Number</Label>
+              <Input
+                id="employee-whatsapp-number"
+                value={employeeForm.whatsappNumber}
+                onChange={(e) => handleEmployeeWhatsAppChange(e.target.value)}
                 inputMode="numeric"
                 maxLength={CONTACT_NUMBER_DIGIT_LIMIT}
-                placeholder="Enter contact number"
+                placeholder="Enter WhatsApp number"
               />
             </div>
             <div className="space-y-2">
@@ -566,6 +599,17 @@ export default function Dashboard() {
                   <SelectItem value="Contract">Contract</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-alternate-number">Alternate Number (Optional)</Label>
+              <Input
+                id="employee-alternate-number"
+                value={employeeForm.alternateNumber}
+                onChange={(e) => handleEmployeeAlternateNumberChange(e.target.value)}
+                inputMode="numeric"
+                maxLength={CONTACT_NUMBER_DIGIT_LIMIT}
+                placeholder="Enter alternate number"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="employee-role">Role</Label>

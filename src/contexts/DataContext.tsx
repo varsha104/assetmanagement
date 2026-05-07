@@ -185,6 +185,7 @@ function mapIntangibleToAsset(item: IntangibleAsset): Asset {
     validityStartDate: item.validity_start_date || '',
     validityEndDate: item.validity_end_date || item.subscription_renewal_date || item.Subscription_renewal_date || '',
     renewalDate: item.renewal_date || item.subscription_renewal_date || item.Subscription_renewal_date || '',
+    amountCurrency: item.amount_currency || item.amountCurrency || 'INR',
     amountPaid: item.amount_paid ?? item.amount,
   };
 }
@@ -213,6 +214,7 @@ interface UserInfo {
   name: string;
   email: string;
   phoneNumber?: string;
+  alternateNumber?: string;
   role: string;
   department: string;
   location?: string;
@@ -222,7 +224,9 @@ interface UserInfo {
 
 type EmployeeInput = {
   name: string;
+  email: string;
   phoneNumber: string;
+  alternateNumber: string;
   employmentType: 'Permanent' | 'Contract';
   role: string;
   location: string;
@@ -246,6 +250,7 @@ function loadLocalEmployees(): UserInfo[] {
         name: item.name || '',
         email: item.email || '',
         phoneNumber: item.phoneNumber || '',
+        alternateNumber: item.alternateNumber || '',
         role: item.role || '',
         department: item.department || item.role || 'Employee',
         location: item.location || '',
@@ -350,6 +355,7 @@ function mapBackendEmployee(e: Employee): UserInfo {
     name: e.name || '',
     email: e.email || '',
     phoneNumber: e.phone_number || e.phoneNumber || '',
+    alternateNumber: '',
     role,
     department: e.department || role || 'Employee',
     location: e.location || '',
@@ -519,7 +525,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Employee name is required');
     }
 
+    const email = employee.email.trim();
     const phoneNumber = employee.phoneNumber.trim();
+    const alternateNumber = employee.alternateNumber.trim();
     const role = employee.role.trim();
     const location = employee.location.trim();
     const result = await employeeApi.add({
@@ -534,8 +542,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       id: result.ok && result.data ? String(result.data.id) : `local-${Date.now()}`,
       username: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       name,
-      email: '',
+      email,
       phoneNumber,
+      alternateNumber,
       role,
       department: role || 'Employee',
       location,
@@ -654,6 +663,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         approvalStatus: asset.approvalStatus || 'Approved',
         approval_status: asset.approvalStatus || 'Approved',
         status: backendStatus,
+        amountCurrency: asset.amountCurrency || 'INR',
+        amount_currency: asset.amountCurrency || 'INR',
         amountPaid: asset.amountPaid || asset.amount || 0,
         amount_paid: asset.amountPaid || asset.amount || 0,
       };
@@ -683,6 +694,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         vendor: updates.vendor ?? currentAsset?.vendor,
         subscription_type: updates.subscriptionType ?? currentAsset?.subscriptionType,
         renewal_date: updates.renewalDate ?? currentAsset?.renewalDate ?? '',
+        amountCurrency: updates.amountCurrency ?? currentAsset?.amountCurrency ?? 'INR',
+        amount_currency: updates.amountCurrency ?? currentAsset?.amountCurrency ?? 'INR',
         amount_paid: updates.amountPaid ?? currentAsset?.amountPaid ?? currentAsset?.amount ?? 0,
         assigner_location: updates.assignerLocation ?? currentAsset?.assignerLocation ?? '',
         employee_name: updates.employeeName ?? currentAsset?.employeeName ?? '',
