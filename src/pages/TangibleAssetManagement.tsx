@@ -28,8 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToastAction } from '@/components/ui/toast';
 import { StatusBadge } from '@/components/StatusBadges';
-import { CircleEllipsis, Download, Loader2, MessageCircle, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
+import { CircleEllipsis, Download, Loader2, Mail, MessageCircle, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { mailApi } from '@/services/api';
 import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
 import { Asset } from '@/types';
 
@@ -121,6 +122,10 @@ function getWhatsAppChatUrl(phoneNumber?: string) {
   return `https://wa.me/${whatsappNumber}`;
 }
 
+function getMailtoUrl(to: string, subject: string, body: string) {
+  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 function generateTangibleSerialNumber(assets: Asset[], excludeId?: string) {
   const existingSerials = new Set(
     assets
@@ -208,6 +213,9 @@ export default function TangibleAssetManagement() {
   const [actionReason, setActionReason] = useState('');
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
   const [employeeInfoAsset, setEmployeeInfoAsset] = useState<Asset | null>(null);
+  const [emailTemplateOpen, setEmailTemplateOpen] = useState(false);
+  const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
+  const [emailTemplateBody, setEmailTemplateBody] = useState('');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(null);
   const [columnFilters, setColumnFilters] = useState<Record<TangibleFilterKey, string[]>>({
@@ -229,7 +237,7 @@ export default function TangibleAssetManagement() {
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
   const employeeOptions = employees;
   const getCurrentEmployeeForAsset = (asset?: Asset | null) => {
-    if (!asset) return '—';
+    if (!asset) return undefined;
 
     return employees.find(
       (employee) =>
@@ -251,6 +259,8 @@ export default function TangibleAssetManagement() {
   };
   const employeeInfoWhatsappNumber = getEmployeeWhatsappForAsset(employeeInfoAsset);
   const employeeInfoWhatsappUrl = getWhatsAppChatUrl(employeeInfoWhatsappNumber);
+  const employeeInfoEmail = getEmployeeEmailForAsset(employeeInfoAsset);
+  const employeeInfoEmailAvailable = employeeInfoEmail !== '—' && employeeInfoEmail.includes('@');
   const columnFilterOptions = useMemo(
     () =>
       TANGIBLE_FILTER_KEYS.reduce(
@@ -362,6 +372,16 @@ export default function TangibleAssetManagement() {
   const handleSubmit = async () => {
     const resolvedCategory = form.category === 'Other' ? form.customCategory.trim() : form.category;
     const serialNumber = form.serialNumber.trim() || generateTangibleSerialNumber(tangibleAssets, editingId || undefined);
+    const previousAsset = editingId ? tangibleAssets.find((asset) => asset.id === editingId) : undefined;
+    const previousAssignedTo = previousAsset?.assignedTo || previousAsset?.employeeName || '';
+    const isAssignedToSelectedEmployee =
+      previousAssignedTo === form.employeeId ||
+      previousAssignedTo === form.employeeName ||
+      previousAsset?.employeeEmail === form.employeeEmail;
+    const shouldSendAssignmentMail =
+      form.status === 'Assigned' &&
+      Boolean(form.employeeEmail.trim()) &&
+      (!editingId || previousAsset?.status !== 'Assigned' || !isAssignedToSelectedEmployee);
 
     if (!form.name.trim() || !form.assetName.trim() || !resolvedCategory) {
       toast({
@@ -411,10 +431,54 @@ export default function TangibleAssetManagement() {
 
       if (editingId) {
         await updateAsset(editingId, payload);
-        toast({ title: 'Tangible asset updated' });
       } else {
         await addAsset(payload);
-        toast({ title: 'Tangible asset added' });
+      }
+
+      let assignmentMailSent = false;
+      let assignmentMailFailed = false;
+
+      if (shouldSendAssignmentMail) {
+        const assignmentMailSubject = `Asset Assigned - ${form.assetName.trim()}`;
+        const assignmentMailBody = `Dear ${form.employeeName || 'Employee'},
+
+The following asset has been assigned to you:
+
+Asset Name: ${form.assetName.trim()}
+Serial Number: ${serialNumber}
+Category: ${resolvedCategory}
+Assigned By: ${user?.name || user?.username || 'Asset Management Team'}
+
+Regards,
+Asset Management Team`;
+
+        const mailResult = await mailApi.sendAssetAssignmentMail({
+          to: form.employeeEmail.trim(),
+          fromUserId: user?.id,
+          subject: assignmentMailSubject,
+          body: assignmentMailBody,
+          assetId: editingId || undefined,
+          assetName: form.assetName.trim(),
+          employeeName: form.employeeName,
+        });
+
+        assignmentMailSent = mailResult.ok;
+        assignmentMailFailed = !mailResult.ok;
+      }
+
+      if (assignmentMailSent) {
+        toast({
+          title: editingId ? 'Tangible asset updated' : 'Tangible asset added',
+          description: `Assignment email sent to ${form.employeeEmail}.`,
+        });
+      } else if (assignmentMailFailed) {
+        toast({
+          title: editingId ? 'Asset updated, email failed' : 'Asset added, email failed',
+          description: 'The asset was saved, but the assignment email could not be sent.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({ title: editingId ? 'Tangible asset updated' : 'Tangible asset added' });
       }
       resetAndClose();
     } catch (error) {
@@ -530,7 +594,21 @@ export default function TangibleAssetManagement() {
   };
 
   const closeEmployeeInfoDialog = () => {
+    setEmailTemplateOpen(false);
+    setEmailTemplateSubject('');
+    setEmailTemplateBody('');
     setEmployeeInfoAsset(null);
+  };
+
+  const openEmailTemplateDialog = () => {
+    if (emailTemplateOpen) {
+      setEmailTemplateOpen(false);
+      return;
+    }
+
+    setEmailTemplateSubject('');
+    setEmailTemplateBody('');
+    setEmailTemplateOpen(true);
   };
 
   const submitAssetAction = async () => {
@@ -1132,7 +1210,11 @@ export default function TangibleAssetManagement() {
       </Dialog>
 
       <Dialog open={Boolean(employeeInfoAsset)} onOpenChange={(open) => (open ? undefined : closeEmployeeInfoDialog())}>
-        <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-md [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+        <DialogContent
+          className={`max-h-[88vh] overflow-hidden border-0 p-0 [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white ${
+            emailTemplateOpen ? 'sm:max-w-4xl' : 'sm:max-w-md'
+          }`}
+        >
           <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
             <DialogTitle className="text-xl text-white">Employee Info</DialogTitle>
             <DialogDescription className="text-sm text-white/80">
@@ -1140,44 +1222,101 @@ export default function TangibleAssetManagement() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 px-6 py-5">
-            <div className="space-y-1">
-              <Label>WhatsApp No</Label>
-              <div className="flex items-center gap-2">
-                <p className="text-sm text-slate-700">{employeeInfoWhatsappNumber}</p>
-                {employeeInfoWhatsappUrl ? (
-                  <Button
-                    asChild
-                    size="icon"
-                    className="h-8 w-8 rounded-full bg-[#25d366] text-white hover:bg-[#1ebe5d]"
-                    aria-label={`Open WhatsApp chat for ${employeeInfoWhatsappNumber}`}
-                  >
-                    <a href={employeeInfoWhatsappUrl} target="_blank" rel="noopener noreferrer">
-                      <MessageCircle className="h-4 w-4" />
-                    </a>
-                  </Button>
-                ) : null}
+          <div className={`grid gap-6 overflow-y-auto px-6 py-5 ${emailTemplateOpen ? 'md:grid-cols-[0.9fr_1.1fr]' : ''}`}>
+            <div className="grid content-start gap-4">
+              <div className="space-y-1">
+                <Label>WhatsApp No</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-slate-700">{employeeInfoWhatsappNumber}</p>
+                  {employeeInfoWhatsappUrl ? (
+                    <Button
+                      asChild
+                      size="icon"
+                      className="h-8 w-8 rounded-full bg-[#25d366] text-white hover:bg-[#1ebe5d]"
+                      aria-label={`Open WhatsApp chat for ${employeeInfoWhatsappNumber}`}
+                    >
+                      <a href={employeeInfoWhatsappUrl} target="_blank" rel="noopener noreferrer">
+                        <MessageCircle className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Emp Mail</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-slate-700">{employeeInfoEmail}</p>
+                  {employeeInfoEmailAvailable ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-8 w-8 rounded-full bg-[#0b2a59] text-white hover:bg-[#12386f]"
+                      aria-label={`${emailTemplateOpen ? 'Hide' : 'Open'} email template for ${employeeInfoEmail}`}
+                      onClick={openEmailTemplateDialog}
+                    >
+                      <Mail className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Role</Label>
+                <p className="text-sm text-slate-700">{getEmployeeRoleForAsset(employeeInfoAsset)}</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Employment Type</Label>
+                <p className="text-sm text-slate-700">{getEmploymentTypeForAsset(employeeInfoAsset)}</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Emp Location</Label>
+                <p className="text-sm text-slate-700">{getEmployeeLocationForAsset(employeeInfoAsset)}</p>
               </div>
             </div>
-            <div className="space-y-1">
-              <Label>Emp Mail</Label>
-              <p className="text-sm text-slate-700">{getEmployeeEmailForAsset(employeeInfoAsset)}</p>
-            </div>
-            <div className="space-y-1">
-              <Label>Role</Label>
-              <p className="text-sm text-slate-700">{getEmployeeRoleForAsset(employeeInfoAsset)}</p>
-            </div>
-            <div className="space-y-1">
-              <Label>Employment Type</Label>
-              <p className="text-sm text-slate-700">{getEmploymentTypeForAsset(employeeInfoAsset)}</p>
-            </div>
-            <div className="space-y-1">
-              <Label>Emp Location</Label>
-              <p className="text-sm text-slate-700">{getEmployeeLocationForAsset(employeeInfoAsset)}</p>
-            </div>
+
+            {emailTemplateOpen ? (
+              <div className="grid content-start gap-4 border-t pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+                {/* <div>
+                  <h3 className="text-base font-semibold text-slate-900">Mail Template</h3>
+                  <p className="text-sm text-slate-500">Prepared email content for the selected employee.</p>
+                </div>*/}
+                <div className="space-y-2">
+                  <Label htmlFor="employee-mail-to">To</Label>
+                  <Input id="employee-mail-to" value={employeeInfoEmailAvailable ? employeeInfoEmail : ''} readOnly />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="employee-mail-subject">Subject</Label>
+                  <Input
+                    id="employee-mail-subject"
+                    value={emailTemplateSubject}
+                    onChange={(event) => setEmailTemplateSubject(event.target.value)}
+                    placeholder="Enter subject"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="employee-mail-body">Message</Label>
+                  <Textarea
+                    id="employee-mail-body"
+                    value={emailTemplateBody}
+                    onChange={(event) => setEmailTemplateBody(event.target.value)}
+                    rows={10}
+                    className="resize-none"
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter className="border-t bg-slate-50 px-6 py-4">
+            {emailTemplateOpen && employeeInfoEmailAvailable ? (
+              <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" asChild>
+                <a
+                  href={getMailtoUrl(employeeInfoEmail, emailTemplateSubject, emailTemplateBody)}
+                  aria-label={`Send email to ${employeeInfoEmail}`}
+                >
+                  Send
+                </a>
+              </Button>
+            ) : null}
             <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" onClick={closeEmployeeInfoDialog}>
               Close
             </Button>
