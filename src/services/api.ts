@@ -132,7 +132,7 @@ export interface Product {
     assigned_to?: string | null;
     assignedTo?: string | null;
     employee_name?: string;
-    employee_contact_number?: string;
+    whatsapp_number?: string;
     employment_type?: string;
     employee_role?: string;
     employeeRole?: string;
@@ -230,7 +230,7 @@ export interface IntangibleAsset {
     category?: string;
     assigner_location?: string;
     employee_name?: string;
-    employee_contact_number?: string;
+    whatsapp_number?: string;
     employment_type?: string;
     role?: string;
     employee_role?: string;
@@ -304,8 +304,10 @@ export interface Employee {
     email?: string;
     username?: string;
     department?: string;
-    phone_number?: string;
-    phoneNumber?: string;
+    whatsapp_number?: string;
+    whatsappNumber?: string;
+    alternate_number?: string;
+    alternateNumber?: string;
     employment_type?: string;
     employmentType?: string;
     role?: string;
@@ -321,12 +323,28 @@ export const employeeApi = {
 
     add: (payload: {
         name: string;
-        phoneNumber: string;
+        whatsappNumber: string;
+        whatsapp_number?: string;
         employmentType: string;
         role: string;
         location: string;
     }) =>
         request<{ message: string; id: number }>('/add_employee', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
+
+    update: (id: string | number, payload: {
+        name: string;
+        email?: string;
+        whatsappNumber: string;
+        whatsapp_number?: string;
+        alternateNumber?: string;
+        employmentType: string;
+        role: string;
+        location: string;
+    }) =>
+        request<{ message: string }>(`/employees/update/${id}`, {
             method: 'POST',
             body: JSON.stringify(payload),
         }),

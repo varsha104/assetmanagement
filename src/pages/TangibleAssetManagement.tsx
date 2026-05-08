@@ -28,13 +28,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToastAction } from '@/components/ui/toast';
 import { StatusBadge } from '@/components/StatusBadges';
-import { CircleEllipsis, Download, Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
+import { CircleEllipsis, Download, Loader2, MessageCircle, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
 import { Asset } from '@/types';
 
 const TANGIBLE_CATEGORIES = ['Laptop', 'Desktop', 'Mouse', 'Headset'] as const;
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
+const DEFAULT_WHATSAPP_COUNTRY_CODE = '91';
 type TangibleFilterKey =
   | 'assignerName'
   | 'category'
@@ -89,7 +90,7 @@ const TANGIBLE_EXPORT_COLUMNS: CsvColumn<Asset>[] = [
   { header: 'Asset Status', value: (asset) => asset.status },
   { header: 'Assigner Location', value: (asset) => asset.assignerLocation },
   { header: 'Employee Name', value: (asset) => asset.employeeName || asset.assignedTo },
-  { header: 'Employee Contact Number', value: (asset) => asset.employeeContactNumber },
+  { header: 'WhatsApp No', value: (asset) => asset.employeeWhatsappNumber },
   { header: 'Employment Type', value: (asset) => asset.employmentType },
   { header: 'Role', value: (asset) => asset.employeeRole },
   { header: 'Employee Location', value: (asset) => asset.employeeLocation },
@@ -110,6 +111,14 @@ function isStandardTangibleCategory(value?: string) {
 
 function normalizeAssignerLocation(value?: string) {
   return ASSIGNER_LOCATIONS.includes(value as (typeof ASSIGNER_LOCATIONS)[number]) ? value || '' : '';
+}
+
+function getWhatsAppChatUrl(phoneNumber?: string) {
+  const digits = (phoneNumber || '').replace(/\D/g, '');
+  if (!digits) return null;
+
+  const whatsappNumber = digits.length === 10 ? `${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits}` : digits;
+  return `https://wa.me/${whatsappNumber}`;
 }
 
 function generateTangibleSerialNumber(assets: Asset[], excludeId?: string) {
@@ -146,7 +155,7 @@ type TangibleFormState = {
   assignerLocation: string;
   employeeId: string;
   employeeName: string;
-  employeeContactNumber: string;
+  employeeWhatsappNumber: string;
   employeeEmail: string;
   employmentType: '' | 'Permanent' | 'Contract';
   employeeRole: string;
@@ -173,7 +182,7 @@ const emptyForm = (): TangibleFormState => ({
   assignerLocation: '',
   employeeId: '',
   employeeName: '',
-  employeeContactNumber: '',
+  employeeWhatsappNumber: '',
   employeeEmail: '',
   employmentType: '',
   employeeRole: '',
@@ -219,13 +228,29 @@ export default function TangibleAssetManagement() {
   const employeeDetailsDisabled = form.status === 'Available';
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
   const employeeOptions = employees;
-  const getEmployeeEmailForAsset = (asset?: Asset | null) => {
+  const getCurrentEmployeeForAsset = (asset?: Asset | null) => {
     if (!asset) return '—';
-    if (asset.employeeEmail) return asset.employeeEmail;
 
-    const matchedEmployee = employees.find((employee) => employee.name === (asset.employeeName || asset.assignedTo || ''));
-    return matchedEmployee?.email || '—';
+    return employees.find(
+      (employee) =>
+        employee.id === asset.assignedTo ||
+        employee.name === (asset.employeeName || asset.assignedTo || ''),
+    );
   };
+  const getEmployeeWhatsappForAsset = (asset?: Asset | null) =>
+    getCurrentEmployeeForAsset(asset)?.whatsappNumber || asset?.employeeWhatsappNumber || '—';
+  const getEmployeeEmailForAsset = (asset?: Asset | null) =>
+    getCurrentEmployeeForAsset(asset)?.email || asset?.employeeEmail || '—';
+  const getEmployeeRoleForAsset = (asset?: Asset | null) =>
+    getCurrentEmployeeForAsset(asset)?.role || asset?.employeeRole || '—';
+  const getEmploymentTypeForAsset = (asset?: Asset | null) =>
+    getCurrentEmployeeForAsset(asset)?.employmentType || asset?.employmentType || '—';
+  const getEmployeeLocationForAsset = (asset?: Asset | null) => {
+    const currentEmployee = getCurrentEmployeeForAsset(asset);
+    return currentEmployee?.location || asset?.employeeLocation || '—';
+  };
+  const employeeInfoWhatsappNumber = getEmployeeWhatsappForAsset(employeeInfoAsset);
+  const employeeInfoWhatsappUrl = getWhatsAppChatUrl(employeeInfoWhatsappNumber);
   const columnFilterOptions = useMemo(
     () =>
       TANGIBLE_FILTER_KEYS.reduce(
@@ -311,7 +336,7 @@ export default function TangibleAssetManagement() {
       assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
       employeeId: matchedEmployee?.id || '',
       employeeName: asset.employeeName || asset.assignedTo || '',
-      employeeContactNumber: matchedEmployee?.phoneNumber || asset.employeeContactNumber || '',
+      employeeWhatsappNumber: matchedEmployee?.whatsappNumber || asset.employeeWhatsappNumber || '',
       employeeEmail: matchedEmployee?.email || asset.employeeEmail || '',
       employmentType:
         asset.status === 'Assigned' && asset.employmentType
@@ -372,7 +397,7 @@ export default function TangibleAssetManagement() {
         assignerLocation: form.assignerLocation,
         ownership: form.ownership,
         employeeName: form.status === 'Assigned' ? form.employeeName : '',
-        employeeContactNumber: form.status === 'Assigned' ? form.employeeContactNumber : '',
+        employeeWhatsappNumber: form.status === 'Assigned' ? form.employeeWhatsappNumber : '',
         employeeEmail: form.status === 'Assigned' ? form.employeeEmail : '',
         employmentType: form.status === 'Assigned' ? form.employmentType : '',
         employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
@@ -921,7 +946,7 @@ export default function TangibleAssetManagement() {
                       status: value as 'Available' | 'Assigned',
                       employeeId: value === 'Assigned' ? prev.employeeId : '',
                       employeeName: value === 'Assigned' ? prev.employeeName : '',
-                      employeeContactNumber: value === 'Assigned' ? prev.employeeContactNumber : '',
+                      employeeWhatsappNumber: value === 'Assigned' ? prev.employeeWhatsappNumber : '',
                       employeeEmail: value === 'Assigned' ? prev.employeeEmail : '',
                       employmentType: value === 'Assigned' ? prev.employmentType : '',
                       employeeRole: value === 'Assigned' ? prev.employeeRole : '',
@@ -965,7 +990,7 @@ export default function TangibleAssetManagement() {
                       ...prev,
                       employeeId: value,
                       employeeName: selectedEmployee?.name || '',
-                      employeeContactNumber: selectedEmployee?.phoneNumber || '',
+                      employeeWhatsappNumber: selectedEmployee?.whatsappNumber || '',
                       employeeEmail: selectedEmployee?.email || '',
                       employmentType: (selectedEmployee?.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract',
                       employeeRole: selectedEmployee?.role || '',
@@ -987,10 +1012,10 @@ export default function TangibleAssetManagement() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Employee Contact Number</Label>
+                <Label>WhatsApp No</Label>
                 <Input
-                  value={form.employeeContactNumber}
-                  onChange={(e) => setForm((prev) => ({ ...prev, employeeContactNumber: e.target.value }))}
+                  value={form.employeeWhatsappNumber}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeWhatsappNumber: e.target.value }))}
                   disabled={employeeDetailsDisabled}
                 />
               </div>
@@ -1117,8 +1142,22 @@ export default function TangibleAssetManagement() {
 
           <div className="grid gap-4 px-6 py-5">
             <div className="space-y-1">
-              <Label>Emp Contact No</Label>
-              <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeContactNumber || '—'}</p>
+              <Label>WhatsApp No</Label>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-slate-700">{employeeInfoWhatsappNumber}</p>
+                {employeeInfoWhatsappUrl ? (
+                  <Button
+                    asChild
+                    size="icon"
+                    className="h-8 w-8 rounded-full bg-[#25d366] text-white hover:bg-[#1ebe5d]"
+                    aria-label={`Open WhatsApp chat for ${employeeInfoWhatsappNumber}`}
+                  >
+                    <a href={employeeInfoWhatsappUrl} target="_blank" rel="noopener noreferrer">
+                      <MessageCircle className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : null}
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Emp Mail</Label>
@@ -1126,15 +1165,15 @@ export default function TangibleAssetManagement() {
             </div>
             <div className="space-y-1">
               <Label>Role</Label>
-              <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeRole || '—'}</p>
+              <p className="text-sm text-slate-700">{getEmployeeRoleForAsset(employeeInfoAsset)}</p>
             </div>
             <div className="space-y-1">
               <Label>Employment Type</Label>
-              <p className="text-sm text-slate-700">{employeeInfoAsset?.employmentType || '—'}</p>
+              <p className="text-sm text-slate-700">{getEmploymentTypeForAsset(employeeInfoAsset)}</p>
             </div>
             <div className="space-y-1">
               <Label>Emp Location</Label>
-              <p className="text-sm text-slate-700">{employeeInfoAsset?.employeeLocation || '—'}</p>
+              <p className="text-sm text-slate-700">{getEmployeeLocationForAsset(employeeInfoAsset)}</p>
             </div>
           </div>
 

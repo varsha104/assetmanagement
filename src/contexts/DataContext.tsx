@@ -140,7 +140,7 @@ function mapProductToAsset(product: Product): Asset {
     assignerLocation: product.assigner_location || '',
     company,
     condition,
-    employeeContactNumber: product.employee_contact_number || '',
+    employeeWhatsappNumber: product.whatsapp_number || '',
     employmentType: product.employment_type || '',
     employeeRole: product.employee_role || product.employeeRole || '',
     assignerName: product.assigner_name || product.created_by || '',
@@ -174,7 +174,7 @@ function mapIntangibleToAsset(item: IntangibleAsset): Asset {
     createdAt: item.validity_start_date || '',
     assignerLocation: item.assigner_location || '',
     employeeName: item.employee_name || item.assigned_to || '',
-    employeeContactNumber: item.employee_contact_number || '',
+    employeeWhatsappNumber: item.whatsapp_number || '',
     employmentType: item.employment_type || '',
     employeeRole: item.employee_role || item.employeeRole || item.role || '',
     employeeLocation: item.employee_location || '',
@@ -213,7 +213,7 @@ interface UserInfo {
   username: string;
   name: string;
   email: string;
-  phoneNumber?: string;
+  whatsappNumber?: string;
   alternateNumber?: string;
   role: string;
   department: string;
@@ -225,7 +225,7 @@ interface UserInfo {
 type EmployeeInput = {
   name: string;
   email: string;
-  phoneNumber: string;
+  whatsappNumber: string;
   alternateNumber: string;
   employmentType: 'Permanent' | 'Contract';
   role: string;
@@ -249,7 +249,7 @@ function loadLocalEmployees(): UserInfo[] {
         username: item.username || '',
         name: item.name || '',
         email: item.email || '',
-        phoneNumber: item.phoneNumber || '',
+        whatsappNumber: item.whatsappNumber || '',
         alternateNumber: item.alternateNumber || '',
         role: item.role || '',
         department: item.department || item.role || 'Employee',
@@ -354,8 +354,8 @@ function mapBackendEmployee(e: Employee): UserInfo {
     username: e.username || '',
     name: e.name || '',
     email: e.email || '',
-    phoneNumber: e.phone_number || e.phoneNumber || '',
-    alternateNumber: '',
+    whatsappNumber: e.whatsapp_number || e.whatsappNumber || '',
+    alternateNumber: e.alternate_number || e.alternateNumber || '',
     role,
     department: e.department || role || 'Employee',
     location: e.location || '',
@@ -381,7 +381,7 @@ function mapBackendRepair(repair: Repair): Issue {
 function mergeEmployeeDirectory(backendEmployees: UserInfo[], localEmployees: UserInfo[]) {
   const merged = [...localEmployees];
   for (const employee of backendEmployees) {
-    if (!merged.some((item) => item.id === employee.id || item.phoneNumber === employee.phoneNumber)) {
+    if (!merged.some((item) => item.id === employee.id || item.whatsappNumber === employee.whatsappNumber)) {
       merged.push(employee);
     }
   }
@@ -397,6 +397,7 @@ interface DataContextType {
   isLoading: boolean;
   refreshData: () => Promise<void>;
   addEmployee: (employee: EmployeeInput) => Promise<void>;
+  updateEmployee: (id: string, employee: EmployeeInput) => Promise<void>;
   addAsset: (asset: Partial<Asset> & { type: AssetType }) => Promise<void>;
   updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
@@ -526,13 +527,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     const email = employee.email.trim();
-    const phoneNumber = employee.phoneNumber.trim();
+    const whatsappNumber = employee.whatsappNumber.trim();
     const alternateNumber = employee.alternateNumber.trim();
     const role = employee.role.trim();
     const location = employee.location.trim();
     const result = await employeeApi.add({
       name,
-      phoneNumber,
+      whatsappNumber,
+      whatsapp_number: whatsappNumber,
       employmentType: employee.employmentType,
       role,
       location,
@@ -543,7 +545,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       username: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       name,
       email,
-      phoneNumber,
+      whatsappNumber,
       alternateNumber,
       role,
       department: role || 'Employee',
@@ -553,7 +555,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
 
     setLocalEmployees((prev) => {
-      const next = prev.filter((item) => item.id !== savedEmployee.id && item.phoneNumber !== savedEmployee.phoneNumber);
+      const next = prev.filter((item) => item.id !== savedEmployee.id && item.whatsappNumber !== savedEmployee.whatsappNumber);
       next.unshift(savedEmployee);
       persistLocalEmployees(next);
       return next;
@@ -564,7 +566,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await refreshData();
       setEmployees((prev) => {
         const withoutSavedEmployee = prev.filter(
-          (item) => item.id !== savedEmployee.id && item.phoneNumber !== savedEmployee.phoneNumber,
+          (item) => item.id !== savedEmployee.id && item.whatsappNumber !== savedEmployee.whatsappNumber,
         );
         return [savedEmployee, ...withoutSavedEmployee];
       });
@@ -572,6 +574,66 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.warn('Falling back to local employee save:', result.error || 'backend route unavailable');
+  }, [refreshData]);
+
+  const updateEmployee = useCallback(async (id: string, employee: EmployeeInput) => {
+    const name = employee.name.trim();
+    if (!name) {
+      throw new Error('Employee name is required');
+    }
+
+    const email = employee.email.trim();
+    const whatsappNumber = employee.whatsappNumber.trim();
+    const alternateNumber = employee.alternateNumber.trim();
+    const role = employee.role.trim();
+    const location = employee.location.trim();
+    const updatedEmployee: UserInfo = {
+      id,
+      username: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name,
+      email,
+      whatsappNumber,
+      alternateNumber,
+      role,
+      department: role || 'Employee',
+      location,
+      employmentType: employee.employmentType,
+      source: id.startsWith('local-') ? 'local' : 'backend',
+    };
+
+    const result = await employeeApi.update(id, {
+      name,
+      email,
+      whatsappNumber,
+      whatsapp_number: whatsappNumber,
+      alternateNumber,
+      employmentType: employee.employmentType,
+      role,
+      location,
+    });
+
+    if (!result.ok) {
+      console.warn('Falling back to local employee update:', result.error || 'backend route unavailable');
+    }
+
+    setLocalEmployees((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      next.unshift(updatedEmployee);
+      persistLocalEmployees(next);
+      return next;
+    });
+    setEmployees((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      return [updatedEmployee, ...next];
+    });
+
+    if (result.ok) {
+      await refreshData();
+      setEmployees((prev) => {
+        const next = prev.filter((item) => item.id !== id);
+        return [updatedEmployee, ...next];
+      });
+    }
   }, [refreshData]);
 
   const addAsset = useCallback(async (asset: Partial<Asset> & { type: AssetType }) => {
@@ -603,8 +665,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         assigner_location: asset.assignerLocation || '',
         employeeName: asset.employeeName || asset.assignedTo || '',
         employee_name: asset.employeeName || asset.assignedTo || '',
-        employeeContactNumber: asset.employeeContactNumber || '',
-        employee_contact_number: asset.employeeContactNumber || '',
+        whatsappNumber: asset.employeeWhatsappNumber || '',
+        whatsapp_number: asset.employeeWhatsappNumber || '',
         employmentType: asset.employmentType || '',
         employment_type: asset.employmentType || '',
         employeeRole: asset.employeeRole || '',
@@ -652,8 +714,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         assigner_location: asset.assignerLocation || '',
         employeeName: asset.employeeName || asset.assignedTo || '',
         employee_name: asset.employeeName || asset.assignedTo || '',
-        employeeContactNumber: asset.employeeContactNumber || '',
-        employee_contact_number: asset.employeeContactNumber || '',
+        whatsappNumber: asset.employeeWhatsappNumber || '',
+        whatsapp_number: asset.employeeWhatsappNumber || '',
         employmentType: asset.employmentType || '',
         employment_type: asset.employmentType || '',
         employeeRole: asset.employeeRole || '',
@@ -699,7 +761,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         amount_paid: updates.amountPaid ?? currentAsset?.amountPaid ?? currentAsset?.amount ?? 0,
         assigner_location: updates.assignerLocation ?? currentAsset?.assignerLocation ?? '',
         employee_name: updates.employeeName ?? currentAsset?.employeeName ?? '',
-        employee_contact_number: updates.employeeContactNumber ?? currentAsset?.employeeContactNumber ?? '',
+        whatsapp_number: updates.employeeWhatsappNumber ?? currentAsset?.employeeWhatsappNumber ?? '',
         employment_type: updates.employmentType ?? currentAsset?.employmentType ?? '',
         employeeRole: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
         employee_role: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
@@ -733,7 +795,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         name: updates.assignerName ?? currentAsset?.assignerName ?? currentAsset?.createdBy ?? '',
         assignerLocation: updates.assignerLocation ?? currentAsset?.assignerLocation ?? '',
         employeeName: updates.employeeName ?? currentAsset?.employeeName ?? '',
-        employeeContactNumber: updates.employeeContactNumber ?? currentAsset?.employeeContactNumber ?? '',
+        whatsappNumber: updates.employeeWhatsappNumber ?? currentAsset?.employeeWhatsappNumber ?? '',
+        whatsapp_number: updates.employeeWhatsappNumber ?? currentAsset?.employeeWhatsappNumber ?? '',
         employmentType: updates.employmentType ?? currentAsset?.employmentType ?? '',
         employeeRole: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
         employee_role: updates.employeeRole ?? currentAsset?.employeeRole ?? '',
@@ -905,6 +968,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         refreshData,
         addEmployee,
+        updateEmployee,
         addAsset,
         updateAsset,
         deleteAsset,

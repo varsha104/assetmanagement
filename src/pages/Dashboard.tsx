@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useData } from '@/contexts/DataContext';
 import { StatusBadge } from '@/components/StatusBadges';
-import { Info, Package, Building2, CheckCircle, Clock, Loader2, Wrench, CircleAlert, Plus } from 'lucide-react';
+import { Info, Package, Building2, CheckCircle, Clock, Loader2, Wrench, CircleAlert, Plus, Pencil } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Asset } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -35,10 +35,10 @@ const emptyEmployeeForm = (): EmployeeFormState => ({
   role: '',
   location: '',
 });
-const CONTACT_NUMBER_DIGIT_LIMIT = 10;
+const WHATSAPP_NUMBER_DIGIT_LIMIT = 10;
 
-function formatContactNumber(value: string) {
-  return value.replace(/\D/g, '').slice(0, CONTACT_NUMBER_DIGIT_LIMIT);
+function formatWhatsAppNumber(value: string) {
+  return value.replace(/\D/g, '').slice(0, WHATSAPP_NUMBER_DIGIT_LIMIT);
 }
 const DEAD_STATUS_KEYS = new Set([
   'DEAD',
@@ -94,7 +94,7 @@ function getAssignerLabel(asset: Asset) {
 }
 
 export default function Dashboard() {
-  const { assets, employees, addEmployee, isLoading } = useData();
+  const { assets, employees, addEmployee, updateEmployee, isLoading } = useData();
   const { toast } = useToast();
   const [assetListOpen, setAssetListOpen] = useState(false);
   const [assetListFilter, setAssetListFilter] = useState<AssetListFilter>('all');
@@ -106,6 +106,7 @@ export default function Dashboard() {
   const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
   const [employeeSubmitting, setEmployeeSubmitting] = useState(false);
   const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(emptyEmployeeForm());
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -153,7 +154,7 @@ export default function Dashboard() {
           ['Status', selectedCompanyAsset.status],
           ['Assigner Location', selectedCompanyAsset.assignerLocation],
           ['Employee Name', selectedCompanyAsset.employeeName || selectedCompanyAsset.assignedTo],
-          ['Employee Contact Number', selectedCompanyAsset.employeeContactNumber],
+          ['WhatsApp No', selectedCompanyAsset.employeeWhatsappNumber],
           ['Role', selectedCompanyAsset.employeeRole],
           ['Employment Type', selectedCompanyAsset.employmentType],
           ['Employee Location', selectedCompanyAsset.employeeLocation],
@@ -172,7 +173,7 @@ export default function Dashboard() {
           ['Asset Status', selectedCompanyAsset.status],
           ['Assigner Location', selectedCompanyAsset.assignerLocation],
           ['Emp Name', selectedCompanyAsset.employeeName || selectedCompanyAsset.assignedTo],
-          ['Emp Contact No', selectedCompanyAsset.employeeContactNumber],
+          ['WhatsApp No', selectedCompanyAsset.employeeWhatsappNumber],
           ['Role', selectedCompanyAsset.employeeRole],
           ['Employment Type', selectedCompanyAsset.employmentType],
           ['Emp Location', selectedCompanyAsset.employeeLocation],
@@ -254,6 +255,7 @@ export default function Dashboard() {
   };
 
   const openEmployeeDialog = () => {
+    setEditingEmployeeId(null);
     setEmployeeForm(emptyEmployeeForm());
     setEmployeeDialogOpen(true);
   };
@@ -261,15 +263,30 @@ export default function Dashboard() {
   const closeEmployeeDialog = () => {
     setEmployeeDialogOpen(false);
     setEmployeeSubmitting(false);
+    setEditingEmployeeId(null);
     setEmployeeForm(emptyEmployeeForm());
   };
 
+  const openEmployeeEditDialog = (employee: typeof employeeRows[number]) => {
+    setEditingEmployeeId(employee.id);
+    setEmployeeForm({
+      name: employee.name || '',
+      email: employee.email || '',
+      whatsappNumber: employee.whatsappNumber || '',
+      alternateNumber: employee.alternateNumber || '',
+      employmentType: employee.employmentType === 'Contract' ? 'Contract' : 'Permanent',
+      role: employee.role || '',
+      location: employee.location || '',
+    });
+    setEmployeeDialogOpen(true);
+  };
+
   const handleEmployeeWhatsAppChange = (value: string) => {
-    setEmployeeForm((prev) => ({ ...prev, whatsappNumber: formatContactNumber(value) }));
+    setEmployeeForm((prev) => ({ ...prev, whatsappNumber: formatWhatsAppNumber(value) }));
   };
 
   const handleEmployeeAlternateNumberChange = (value: string) => {
-    setEmployeeForm((prev) => ({ ...prev, alternateNumber: formatContactNumber(value) }));
+    setEmployeeForm((prev) => ({ ...prev, alternateNumber: formatWhatsAppNumber(value) }));
   };
 
   const handleEmployeeSubmit = async () => {
@@ -282,7 +299,7 @@ export default function Dashboard() {
       return;
     }
 
-    if (employeeForm.whatsappNumber.length !== CONTACT_NUMBER_DIGIT_LIMIT) {
+    if (employeeForm.whatsappNumber.length !== WHATSAPP_NUMBER_DIGIT_LIMIT) {
       toast({
         title: 'Invalid WhatsApp number',
         description: 'WhatsApp number must be exactly 10 digits.',
@@ -291,7 +308,7 @@ export default function Dashboard() {
       return;
     }
 
-    if (employeeForm.alternateNumber.trim() && employeeForm.alternateNumber.length !== CONTACT_NUMBER_DIGIT_LIMIT) {
+    if (employeeForm.alternateNumber.trim() && employeeForm.alternateNumber.length !== WHATSAPP_NUMBER_DIGIT_LIMIT) {
       toast({
         title: 'Invalid alternate number',
         description: 'Alternate number must be exactly 10 digits when provided.',
@@ -302,16 +319,22 @@ export default function Dashboard() {
 
     setEmployeeSubmitting(true);
     try {
-      await addEmployee({
+      const payload = {
         name: employeeForm.name,
         email: employeeForm.email,
-        phoneNumber: employeeForm.whatsappNumber,
+        whatsappNumber: employeeForm.whatsappNumber,
         alternateNumber: employeeForm.alternateNumber,
         employmentType: employeeForm.employmentType,
         role: employeeForm.role,
         location: employeeForm.location,
-      });
-      toast({ title: 'Employee added' });
+      };
+      if (editingEmployeeId) {
+        await updateEmployee(editingEmployeeId, payload);
+        toast({ title: 'Employee updated' });
+      } else {
+        await addEmployee(payload);
+        toast({ title: 'Employee added' });
+      }
       closeEmployeeDialog();
     } catch (error) {
       toast({
@@ -469,12 +492,13 @@ export default function Dashboard() {
                   <TableHead className="font-bold">Alternate No</TableHead>
                   <TableHead className="font-bold">Employment Type</TableHead>
                   <TableHead className="font-bold">Location</TableHead>
+                  <TableHead className="font-bold text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {employeeRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
                       No employees added yet.
                     </TableCell>
                   </TableRow>
@@ -484,10 +508,22 @@ export default function Dashboard() {
                       <TableCell className="font-medium">{employee.name}</TableCell>
                       <TableCell>{employee.role || '—'}</TableCell>
                       <TableCell>{employee.email || '—'}</TableCell>
-                      <TableCell>{employee.phoneNumber || '—'}</TableCell>
+                      <TableCell>{employee.whatsappNumber || '—'}</TableCell>
                       <TableCell>{employee.alternateNumber || '—'}</TableCell>
                       <TableCell>{employee.employmentType || '—'}</TableCell>
                       <TableCell>{employee.location || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => openEmployeeEditDialog(employee)}
+                          aria-label={`Edit ${employee.name}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -547,9 +583,9 @@ export default function Dashboard() {
       <Dialog open={employeeDialogOpen} onOpenChange={(open) => (open ? setEmployeeDialogOpen(true) : closeEmployeeDialog())}>
         <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
           <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
-            <DialogTitle className="text-xl text-white">New Employee</DialogTitle>
+            <DialogTitle className="text-xl text-white">{editingEmployeeId ? 'Edit Employee' : 'New Employee'}</DialogTitle>
             <DialogDescription className="text-sm text-white/80">
-              Capture the employee details used across both asset forms.
+              {editingEmployeeId ? 'Update the employee details used across both asset forms.' : 'Capture the employee details used across both asset forms.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
@@ -579,7 +615,7 @@ export default function Dashboard() {
                 value={employeeForm.whatsappNumber}
                 onChange={(e) => handleEmployeeWhatsAppChange(e.target.value)}
                 inputMode="numeric"
-                maxLength={CONTACT_NUMBER_DIGIT_LIMIT}
+                maxLength={WHATSAPP_NUMBER_DIGIT_LIMIT}
                 placeholder="Enter WhatsApp number"
               />
             </div>
@@ -607,7 +643,7 @@ export default function Dashboard() {
                 value={employeeForm.alternateNumber}
                 onChange={(e) => handleEmployeeAlternateNumberChange(e.target.value)}
                 inputMode="numeric"
-                maxLength={CONTACT_NUMBER_DIGIT_LIMIT}
+                maxLength={WHATSAPP_NUMBER_DIGIT_LIMIT}
                 placeholder="Enter alternate number"
               />
             </div>
@@ -644,7 +680,7 @@ export default function Dashboard() {
               Cancel
             </Button>
             <Button onClick={handleEmployeeSubmit} disabled={employeeSubmitting}>
-              {employeeSubmitting ? 'Saving...' : 'Save Employee'}
+              {employeeSubmitting ? 'Saving...' : editingEmployeeId ? 'Update Employee' : 'Save Employee'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'higher_management' | 'hr_manager' | 'employee' | 'accounts' | 'it_admin';
+﻿export type UserRole = 'admin' | 'higher_management' | 'hr_manager' | 'employee' | 'accounts' | 'it_admin';
 
 export interface User {
   id: string;
@@ -26,7 +26,7 @@ export interface Asset {
   createdBy: string;
   createdAt: string;
   assignerLocation?: string;
-  employeeContactNumber?: string;
+  employeeWhatsappNumber?: string;
   employmentType?: 'Permanent' | 'Contract' | string;
   employeeRole?: string;
   employeeEmail?: string;

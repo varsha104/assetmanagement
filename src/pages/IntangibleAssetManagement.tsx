@@ -143,7 +143,7 @@ type IntangibleFormState = {
   assignerLocation: string;
   employeeId: string;
   employeeName: string;
-  employeeContactNumber: string;
+  employeeWhatsappNumber: string;
   employmentType: '' | 'Permanent' | 'Contract';
   employeeRole: string;
   employeeLocation: string;
@@ -168,7 +168,7 @@ const emptyForm = (): IntangibleFormState => ({
   assignerLocation: '',
   employeeId: '',
   employeeName: '',
-  employeeContactNumber: '',
+  employeeWhatsappNumber: '',
   employmentType: '',
   employeeRole: '',
   employeeLocation: '',
@@ -329,7 +329,7 @@ export default function IntangibleAssetManagement() {
       assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
       employeeId: '',
       employeeName: asset.employeeName || asset.assignedTo || '',
-      employeeContactNumber: asset.employeeContactNumber || '',
+      employeeWhatsappNumber: asset.employeeWhatsappNumber || '',
       employmentType:
         asset.status === 'Assigned' && asset.employmentType
           ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
@@ -407,7 +407,7 @@ export default function IntangibleAssetManagement() {
         createdBy: user?.id || 'higher_management',
           assignerLocation: form.assignerLocation,
           employeeName: form.status === 'Assigned' ? form.employeeName : '',
-          employeeContactNumber: form.status === 'Assigned' ? form.employeeContactNumber : '',
+          employeeWhatsappNumber: form.status === 'Assigned' ? form.employeeWhatsappNumber : '',
           employmentType: form.status === 'Assigned' ? form.employmentType : '',
           employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
           employeeLocation: form.status === 'Assigned' ? form.employeeLocation : '',
