@@ -85,7 +85,7 @@ const tangibleFilterAccessors: Record<TangibleFilterKey, (asset: Asset) => strin
 
 const TANGIBLE_EXPORT_COLUMNS: CsvColumn<Asset>[] = [
   { header: 'Serial No.', value: (asset) => asset.serialNumber },
-  { header: 'Assigner Name', value: (asset) => asset.assignerName },
+  { header: 'Name', value: (asset) => asset.assignerName },
   { header: 'Category', value: (asset) => asset.category },
   { header: 'Asset Name', value: (asset) => asset.assetName || asset.name },
   { header: 'Asset Status', value: (asset) => asset.status },
@@ -120,10 +120,6 @@ function getWhatsAppChatUrl(phoneNumber?: string) {
 
   const whatsappNumber = digits.length === 10 ? `${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits}` : digits;
   return `https://wa.me/${whatsappNumber}`;
-}
-
-function getMailtoUrl(to: string, subject: string, body: string) {
-  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function generateTangibleSerialNumber(assets: Asset[], excludeId?: string) {
@@ -216,6 +212,7 @@ export default function TangibleAssetManagement() {
   const [emailTemplateOpen, setEmailTemplateOpen] = useState(false);
   const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
   const [emailTemplateBody, setEmailTemplateBody] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>(null);
   const [columnFilters, setColumnFilters] = useState<Record<TangibleFilterKey, string[]>>({
@@ -378,10 +375,8 @@ export default function TangibleAssetManagement() {
       previousAssignedTo === form.employeeId ||
       previousAssignedTo === form.employeeName ||
       previousAsset?.employeeEmail === form.employeeEmail;
-    const shouldSendAssignmentMail =
-      form.status === 'Assigned' &&
-      Boolean(form.employeeEmail.trim()) &&
-      (!editingId || previousAsset?.status !== 'Assigned' || !isAssignedToSelectedEmployee);
+    // Assignment mail is disabled for tangible assets.
+    const shouldSendAssignmentMail = false;
 
     if (!form.name.trim() || !form.assetName.trim() || !resolvedCategory) {
       toast({
@@ -445,9 +440,7 @@ export default function TangibleAssetManagement() {
 The following asset has been assigned to you:
 
 Asset Name: ${form.assetName.trim()}
-Serial Number: ${serialNumber}
 Category: ${resolvedCategory}
-Assigned By: ${user?.name || user?.username || 'Asset Management Team'}
 
 Regards,
 Asset Management Team`;
@@ -611,6 +604,53 @@ Asset Management Team`;
     setEmailTemplateOpen(true);
   };
 
+  const handleEmployeeEmailSend = async () => {
+    if (!employeeInfoEmailAvailable || !employeeInfoAsset) return;
+
+    const subject = emailTemplateSubject.trim();
+    const body = emailTemplateBody.trim();
+
+    if (!subject || !body) {
+      toast({
+        title: 'Missing email content',
+        description: 'Please enter both subject and message.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setEmailSending(true);
+    try {
+      const result = await mailApi.sendEmployeeMail({
+        to: employeeInfoEmail,
+        fromUserId: user?.id,
+        subject,
+        body,
+        employeeName: employeeInfoAsset.employeeName || employeeInfoAsset.assignedTo || '',
+      });
+
+      if (!result.ok) {
+        throw new Error(result.error || 'Email could not be sent.');
+      }
+
+      toast({
+        title: 'Email sent',
+        description: `Email sent to ${employeeInfoEmail}.`,
+      });
+      setEmailTemplateSubject('');
+      setEmailTemplateBody('');
+      setEmailTemplateOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Email failed',
+        description: error instanceof Error ? error.message : 'Email could not be sent.',
+        variant: 'destructive',
+      });
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   const submitAssetAction = async () => {
     if (!actionAsset || !actionMode) return;
 
@@ -753,18 +793,10 @@ Asset Management Team`;
                     className="border-white data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0b2a59]"
                   />
                 </th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Serial No.</th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
                   <ColumnFilter
-                    title="Serial No."
-                    options={columnFilterOptions.serialNumber}
-                    selected={columnFilters.serialNumber}
-                    onChange={(selected) => setColumnFilters((prev) => ({ ...prev, serialNumber: selected }))}
-                    dark
-                  />
-                </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
-                  <ColumnFilter
-                    title="Assigner Name"
+                    title="Name"
                     options={columnFilterOptions.assignerName}
                     selected={columnFilters.assignerName}
                     onChange={(selected) => setColumnFilters((prev) => ({ ...prev, assignerName: selected }))}
@@ -1308,16 +1340,18 @@ Asset Management Team`;
 
           <DialogFooter className="border-t bg-slate-50 px-6 py-4">
             {emailTemplateOpen && employeeInfoEmailAvailable ? (
-              <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" asChild>
-                <a
-                  href={getMailtoUrl(employeeInfoEmail, emailTemplateSubject, emailTemplateBody)}
-                  aria-label={`Send email to ${employeeInfoEmail}`}
-                >
-                  Send
-                </a>
+              <Button
+                type="button"
+                className="bg-[#0b2a59] text-white hover:bg-[#12386f]"
+                onClick={handleEmployeeEmailSend}
+                disabled={emailSending}
+                aria-label={`Send email to ${employeeInfoEmail}`}
+              >
+                {emailSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Send
               </Button>
             ) : null}
-            <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" onClick={closeEmployeeInfoDialog}>
+            <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" onClick={closeEmployeeInfoDialog} disabled={emailSending}>
               Close
             </Button>
           </DialogFooter>

@@ -369,6 +369,17 @@ export const employeeApi = {
 // ─── Asset Request / Approval APIs ──────────────────────────────────────────
 
 export const mailApi = {
+    sendEmployeeMail: (payload: {
+        to: string;
+        fromUserId?: string;
+        subject: string;
+        body: string;
+        employeeName?: string;
+    }) =>
+        request<{ message: string }>('/send-employee-mail', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
     sendAssetAssignmentMail: (payload: {
         to: string;
         fromUserId?: string;
