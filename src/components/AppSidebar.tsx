@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ComponentType } from 'react';
-import { LayoutDashboard, Package, Layers3, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, Package, Layers3, LogOut, Users, X } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth, getRoleLabel } from '@/contexts/AuthContext';
 import {
@@ -38,6 +38,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Employees', url: '/employees', icon: Users },
   { title: 'Tangible Assets', url: '/tangible-assets', icon: Package },
   { title: 'Intangible Assets', url: '/intangible-assets', icon: Layers3 },
 ];

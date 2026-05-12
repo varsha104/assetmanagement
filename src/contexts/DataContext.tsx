@@ -148,6 +148,7 @@ function mapProductToAsset(product: Product): Asset {
     // Tangible-specific
     serialNumber: product.serial_number || '',
     amount: product.amount,
+    amountCurrency: product.amount_currency || product.amountCurrency || 'INR',
     employeeName: product.employee_name || product.assigned_to || '',
     employeeLocation: product.employee_location || '',
     laptopModelNumber: product.laptop_model_number || '',
@@ -324,7 +325,7 @@ function isMaintenanceConstraintDeleteError(error: string | null | undefined) {
   return message.includes('relation "maintenance"') && message.includes('asset_id');
 }
 
-type TangibleAssetOverride = Pick<Partial<Asset>, 'ownership' | 'vendor' | 'vendorName' | 'amount' | 'company'>;
+type TangibleAssetOverride = Pick<Partial<Asset>, 'ownership' | 'vendor' | 'vendorName' | 'amount' | 'amountCurrency' | 'company'>;
 
 function loadTangibleAssetOverrides(): Record<string, TangibleAssetOverride> {
   if (typeof window === 'undefined') return {};
@@ -441,6 +442,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const isDashboardRoute = pathname === '/' || pathname === '/dashboard';
       const isTangibleRoute = pathname === '/tangible-assets' || pathname === '/assets';
       const isIntangibleRoute = pathname === '/intangible-assets';
+      const isEmployeeRoute = pathname === '/employees';
 
       // Fetch only the datasets needed by the active route.
       if (isDashboardRoute || isTangibleRoute) {
@@ -473,8 +475,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       setAssets(sortAssetsNewestFirst([...tangibleAssets, ...intangibleAssets]));
 
-      if (isDashboardRoute || isTangibleRoute || isIntangibleRoute) {
-        // Dashboard and both asset forms need the employee directory.
+      if (isDashboardRoute || isTangibleRoute || isIntangibleRoute || isEmployeeRoute) {
+        // Dashboard, employee management, and both asset forms need the employee directory.
         const empResult = await employeeApi.getAll();
         let backendEmployees: UserInfo[] = [];
         if (empResult.ok && empResult.data) {
@@ -681,9 +683,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         laptopSpecifications: asset.laptopSpecifications || '',
         laptop_specifications: asset.laptopSpecifications || '',
         amount: asset.amount || 0,
+        amountCurrency: asset.amountCurrency || 'INR',
+        amount_currency: asset.amountCurrency || 'INR',
       });
       if (!result.ok) {
         throw new Error(getFriendlyAssetError(result.error, 'Failed to add tangible asset'));
+      }
+
+      if (result.data?.product_id) {
+        persistTangibleAssetOverride(String(result.data.product_id), {
+          amount: asset.amount || 0,
+          amountCurrency: asset.amountCurrency || 'INR',
+        });
       }
 
       await refreshData();
@@ -813,6 +824,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             ? updates.vendorName ?? updates.vendor ?? currentAsset?.vendorName ?? currentAsset?.vendor ?? ''
             : '',
         amount: updates.amount ?? currentAsset?.amount ?? 0,
+        amountCurrency: updates.amountCurrency ?? currentAsset?.amountCurrency ?? 'INR',
+        amount_currency: updates.amountCurrency ?? currentAsset?.amountCurrency ?? 'INR',
       };
       setIfPresent(payload, 'purchaseDate', updates.purchaseDate ?? currentAsset?.purchaseDate);
 
@@ -840,6 +853,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         vendorName: nextVendorName,
         vendor: nextVendorName,
         amount: updates.amount ?? currentAsset?.amount ?? 0,
+        amountCurrency: updates.amountCurrency ?? currentAsset?.amountCurrency ?? 'INR',
         company: nextOwnership === 'Vendor Asset' ? nextVendorName : updates.company ?? currentAsset?.company ?? '',
       });
     }

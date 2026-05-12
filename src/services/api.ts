@@ -141,6 +141,8 @@ export interface Product {
     vendor_name?: string;
     vendor?: string;
     amount?: number;
+    amount_currency?: string;
+    amountCurrency?: string;
     serial_number?: string;
     serialnumber: string;
     purchase_date?: string;
@@ -158,7 +160,7 @@ export const productApi = {
 
     /** Add a new tangible product */
     add: (payload: Record<string, unknown>) =>
-        request<{ message: string }>('/add_product', {
+        request<{ message: string; product_id?: number }>('/add_product', {
             method: 'POST',
             body: JSON.stringify(payload),
         }),
@@ -368,6 +370,19 @@ export const employeeApi = {
 
 // ─── Asset Request / Approval APIs ──────────────────────────────────────────
 
+export const REQUIRED_MAIL_SIGNATURE = 'Thanks and Regards\nAsset Management Team';
+
+const withRequiredMailSignature = (body: string) => {
+    const trimmedBody = body.trimEnd();
+    const signaturePattern = /thanks\s+and\s+regards\s+Asset\s+Management\s+Team\s*$/i;
+
+    if (signaturePattern.test(trimmedBody.replace(/\r?\n/g, ' '))) {
+        return trimmedBody;
+    }
+
+    return `${trimmedBody}\n\n${REQUIRED_MAIL_SIGNATURE}`;
+};
+
 export const mailApi = {
     sendEmployeeMail: (payload: {
         to: string;
@@ -378,7 +393,10 @@ export const mailApi = {
     }) =>
         request<{ message: string }>('/send-employee-mail', {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                ...payload,
+                body: withRequiredMailSignature(payload.body),
+            }),
         }),
     sendAssetAssignmentMail: (payload: {
         to: string;
@@ -391,7 +409,10 @@ export const mailApi = {
     }) =>
         request<{ message: string }>('/send-asset-assignment-mail', {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                ...payload,
+                body: withRequiredMailSignature(payload.body),
+            }),
         }),
 };
 

@@ -12,6 +12,7 @@ import AppLayout from '@/components/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import TangibleAssetManagement from '@/pages/TangibleAssetManagement';
 import IntangibleAssetManagement from '@/pages/IntangibleAssetManagement';
+import EmployeeManagement from '@/pages/EmployeeManagement';
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ const App = () => (
                   }
                 >
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/employees" element={<EmployeeManagement />} />
                   <Route path="/tangible-assets" element={<TangibleAssetManagement />} />
                   <Route path="/intangible-assets" element={<IntangibleAssetManagement />} />
                   <Route path="/assets" element={<Navigate to="/tangible-assets" replace />} />

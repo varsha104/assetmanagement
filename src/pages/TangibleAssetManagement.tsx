@@ -37,6 +37,7 @@ import { Asset } from '@/types';
 const TANGIBLE_CATEGORIES = ['Laptop', 'Desktop', 'Mouse', 'Headset'] as const;
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
 const DEFAULT_WHATSAPP_COUNTRY_CODE = '91';
+type CurrencyCode = 'USD' | 'INR';
 type TangibleFilterKey =
   | 'assignerName'
   | 'category'
@@ -77,7 +78,7 @@ const tangibleFilterAccessors: Record<TangibleFilterKey, (asset: Asset) => strin
   employeeName: (asset) => asset.employeeName || asset.assignedTo || '—',
   ownership: (asset) => getOwnershipLabel(asset),
   vendorName: (asset) => asset.vendorName || asset.vendor || '—',
-  amount: (asset) => (asset.amount != null ? String(asset.amount) : '—'),
+  amount: (asset) => formatCurrencyAmount(asset.amount, getAssetAmountCurrency(asset)),
   serialNumber: (asset) => asset.serialNumber || '—',
   modelNumber: (asset) => asset.laptopModelNumber || '—',
   specifications: (asset) => asset.laptopSpecifications || '—',
@@ -97,10 +98,45 @@ const TANGIBLE_EXPORT_COLUMNS: CsvColumn<Asset>[] = [
   { header: 'Employee Location', value: (asset) => asset.employeeLocation },
   { header: 'Ownership', value: (asset) => getOwnershipLabel(asset) },
   { header: 'Vendor Name', value: (asset) => asset.vendorName || asset.vendor },
-  { header: 'Amount', value: (asset) => asset.amount },
+  { header: 'Amount (USD or INR)', value: (asset) => formatCurrencyAmount(asset.amount, getAssetAmountCurrency(asset)) },
   { header: 'Model No.', value: (asset) => asset.laptopModelNumber },
   { header: 'Specifications', value: (asset) => asset.laptopSpecifications },
 ];
+
+function getAssetAmountCurrency(asset: Asset): CurrencyCode {
+  return asset.amountCurrency === 'USD' || asset.amountCurrency === 'INR' ? asset.amountCurrency : 'INR';
+}
+
+function formatCurrencyAmount(amount: number | undefined, currency: CurrencyCode) {
+  if (amount == null || amount <= 0) return '—';
+
+  return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(amount);
+}
+
+function isValidUsdAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$/.test(trimmed);
+}
+
+function isValidInrAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^(\d+|\d{1,3}(,\d{2})*,\d{3})(\.\d{1,2})?$/.test(trimmed);
+}
+
+function parseCurrencyAmount(value: string, currency: CurrencyCode) {
+  const trimmed = value.trim();
+  const isValid = currency === 'USD' ? isValidUsdAmount(trimmed) : isValidInrAmount(trimmed);
+  if (!isValid) return null;
+
+  const normalized = Number(trimmed.replace(/,/g, ''));
+  return Number.isFinite(normalized) ? normalized : null;
+}
 
 function normalizeTangibleCategory(value?: string) {
   return TANGIBLE_CATEGORIES.includes(value as (typeof TANGIBLE_CATEGORIES)[number]) ? value || 'Laptop' : 'Other';
@@ -165,6 +201,7 @@ type TangibleFormState = {
   laptopModelNumber: string;
   laptopSpecifications: string;
   vendorName: string;
+  amountCurrency: CurrencyCode;
   amount: string;
 };
 
@@ -192,6 +229,7 @@ const emptyForm = (): TangibleFormState => ({
   laptopModelNumber: '',
   laptopSpecifications: '',
   vendorName: '',
+  amountCurrency: 'INR',
   amount: '',
 });
 
@@ -355,7 +393,8 @@ export default function TangibleAssetManagement() {
       laptopModelNumber: asset.laptopModelNumber || '',
       laptopSpecifications: asset.laptopSpecifications || '',
       vendorName: asset.vendorName || asset.vendor || '',
-      amount: asset.amount != null ? String(asset.amount) : '',
+      amountCurrency: getAssetAmountCurrency(asset),
+      amount: asset.amount != null && asset.amount > 0 ? String(asset.amount) : '',
     });
     setDialogOpen(true);
   };
@@ -400,6 +439,20 @@ export default function TangibleAssetManagement() {
       return;
     }
 
+    const parsedAmount = form.amount.trim() ? parseCurrencyAmount(form.amount, form.amountCurrency) : 0;
+
+    if (parsedAmount == null) {
+      toast({
+        title: 'Invalid amount format',
+        description:
+          form.amountCurrency === 'USD'
+            ? 'Use a valid USD amount format.'
+            : 'Use a valid INR amount format.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload = {
@@ -420,7 +473,9 @@ export default function TangibleAssetManagement() {
         serialNumber,
         laptopModelNumber: form.laptopModelNumber,
         laptopSpecifications: form.laptopSpecifications,
-        amount: form.amount ? Number(form.amount) : 0,
+        amount: parsedAmount,
+        amountCurrency: form.amountCurrency,
+        amount_currency: form.amountCurrency,
         vendorName: form.ownership === 'Vendor Asset' ? form.vendorName : '',
       };
 
@@ -868,7 +923,7 @@ Asset Management Team`;
                 </th>
                 <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">
                   <ColumnFilter
-                    title="Amount"
+                    title="Amount (USD or INR)"
                     options={columnFilterOptions.amount}
                     selected={columnFilters.amount}
                     onChange={(selected) => setColumnFilters((prev) => ({ ...prev, amount: selected }))}
@@ -942,7 +997,7 @@ Asset Management Team`;
                     </td>
                     <td className="px-4 py-4">{getOwnershipLabel(asset)}</td>
                     <td className="px-4 py-4">{asset.vendorName || asset.vendor || '—'}</td>
-                    <td className="px-4 py-4">{asset.amount != null ? asset.amount : '—'}</td>
+                    <td className="px-4 py-4">{formatCurrencyAmount(asset.amount, getAssetAmountCurrency(asset))}</td>
                     <td className="px-4 py-4">{asset.laptopModelNumber || '—'}</td>
                     <td className="px-4 py-4">{asset.laptopSpecifications || '—'}</td>
                     <td className="px-4 py-4">
@@ -1200,14 +1255,32 @@ Asset Management Team`;
                 />
               </div>
               <div className="space-y-2">
-                <Label>Amount</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.amount}
-                  onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                  placeholder="Enter amount"
-                />
+                <Label>Amount (USD or INR)</Label>
+                <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-3">
+                  <Select
+                    value={form.amountCurrency}
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, amountCurrency: value as CurrencyCode }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="INR">INR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.amount}
+                    onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                    placeholder={
+                      form.amountCurrency === 'USD'
+                        ? 'Enter amount like 1,200.50'
+                        : 'Enter amount like 1,20,000.50'
+                    }
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Serial Number</Label>
