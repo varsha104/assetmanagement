@@ -26,9 +26,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToastAction } from '@/components/ui/toast';
-import { Download, Loader2, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Download, Loader2, MoreVertical, Pencil, Plus, Search, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
+import { createTableImageFile, exportCsv, type CsvColumn } from '@/lib/exportCsv';
 import { Asset } from '@/types';
 
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
@@ -139,7 +139,6 @@ type IntangibleFormState = {
   name: string;
   category: string;
   customCategory: string;
-  status: 'Available' | 'Assigned';
   assignerLocation: string;
   employeeId: string;
   employeeName: string;
@@ -164,7 +163,6 @@ const emptyForm = (): IntangibleFormState => ({
   name: '',
   category: '',
   customCategory: '',
-  status: 'Available',
   assignerLocation: '',
   employeeId: '',
   employeeName: '',
@@ -288,20 +286,88 @@ export default function IntangibleAssetManagement() {
   };
 
   const handleExport = () => {
-    if (filteredAssets.length === 0) {
+    const selectedAssets = selectedAssetIds.length > 0
+      ? intangibleAssets.filter((asset) => selectedAssetIds.includes(asset.id))
+      : [];
+    const assetsToExport = selectedAssets.length > 0 ? selectedAssets : filteredAssets;
+    const exportScope = selectedAssets.length > 0 ? 'selected' : 'filtered';
+
+    if (assetsToExport.length === 0) {
       toast({
         title: 'Nothing to export',
-        description: 'No intangible assets match the current filters.',
+        description: selectedAssetIds.length > 0 ? 'Selected intangible assets could not be found.' : 'No intangible assets match the current filters.',
         variant: 'destructive',
       });
       return;
     }
 
-    exportCsv('intangible-assets.csv', filteredAssets, INTANGIBLE_EXPORT_COLUMNS);
+    exportCsv('intangible-assets.csv', assetsToExport, INTANGIBLE_EXPORT_COLUMNS);
     toast({
       title: 'Intangible assets exported',
-      description: `${filteredAssets.length} filtered asset${filteredAssets.length === 1 ? '' : 's'} downloaded.`,
+      description: `${assetsToExport.length} ${exportScope} asset${assetsToExport.length === 1 ? '' : 's'} downloaded.`,
     });
+  };
+
+  const handleShareAssets = async (asset?: Asset) => {
+    const selectedAssets = selectedAssetIds.length > 0
+      ? intangibleAssets.filter((item) => selectedAssetIds.includes(item.id))
+      : [];
+    const assetsToShare = asset ? [asset] : selectedAssets.length > 0 ? selectedAssets : filteredAssets;
+
+    if (assetsToShare.length === 0) {
+      toast({
+        title: 'Nothing to share',
+        description: selectedAssetIds.length > 0 ? 'Selected intangible assets could not be found.' : 'No intangible assets match the current filters.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const title = assetsToShare.length === 1 ? getAssetDisplayName(assetsToShare[0]) : 'Intangible assets';
+    const imageColumns: CsvColumn<Asset>[] = [
+      ...INTANGIBLE_EXPORT_COLUMNS.slice(0, -1),
+      { header: 'Amount (USD or INR)', value: (item) => formatAmountPaid(item) },
+    ];
+    const file = await createTableImageFile('intangible-assets.png', title, assetsToShare, imageColumns);
+    const shareData: ShareData = {
+      title,
+      text: `${assetsToShare.length} intangible asset${assetsToShare.length === 1 ? '' : 's'} attached as an image.`,
+      files: [file],
+    };
+
+    try {
+      if (typeof navigator === 'undefined' || !navigator.share) {
+        toast({
+          title: 'Sharing is not supported',
+          description: 'This browser cannot share image attachments directly.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (navigator.canShare && !navigator.canShare(shareData)) {
+        toast({
+          title: 'Image sharing is not supported',
+          description: 'This browser cannot share this image attachment directly.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      await navigator.share(shareData);
+      toast({
+        title: 'Intangible assets shared',
+        description: `${assetsToShare.length} asset${assetsToShare.length === 1 ? '' : 's'} sent as an image.`,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+
+      toast({
+        title: 'Share failed',
+        description: error instanceof Error ? error.message : 'Unable to share intangible assets as an image.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const openEdit = (asset: Asset) => {
@@ -325,13 +391,12 @@ export default function IntangibleAssetManagement() {
       name: asset.name || '',
       category: normalizedCategory,
       customCategory: normalizedCategory === 'Other' ? category : '',
-      status: (asset.status === 'Assigned' ? 'Assigned' : 'Available') as 'Available' | 'Assigned',
       assignerLocation: normalizeAssignerLocation(asset.assignerLocation),
       employeeId: '',
       employeeName: asset.employeeName || asset.assignedTo || '',
       employeeWhatsappNumber: asset.employeeWhatsappNumber || '',
       employmentType:
-        asset.status === 'Assigned' && asset.employmentType
+        asset.employmentType
           ? ((asset.employmentType === 'Contract' ? 'Contract' : 'Permanent') as 'Permanent' | 'Contract')
           : '',
       employeeRole: asset.employeeRole || '',
@@ -401,16 +466,16 @@ export default function IntangibleAssetManagement() {
         category: resolvedCategory,
         purchaseDate: form.validityStartDate,
         warrantyPeriod: form.validityEndDate,
-        status: form.status,
+        status: 'Available',
         approvalStatus: 'Approved' as const,
-        assignedTo: form.status === 'Assigned' && form.employeeName ? form.employeeName : undefined,
+        assignedTo: undefined,
         createdBy: user?.id || 'higher_management',
           assignerLocation: form.assignerLocation,
-          employeeName: form.status === 'Assigned' ? form.employeeName : '',
-          employeeWhatsappNumber: form.status === 'Assigned' ? form.employeeWhatsappNumber : '',
-          employmentType: form.status === 'Assigned' ? form.employmentType : '',
-          employeeRole: form.status === 'Assigned' ? form.employeeRole : '',
-          employeeLocation: form.status === 'Assigned' ? form.employeeLocation : '',
+          employeeName: '',
+          employeeWhatsappNumber: '',
+          employmentType: '',
+          employeeRole: '',
+          employeeLocation: '',
           subscriptionType: form.subscriptionType,
           validityStartDate: form.validityStartDate,
           validityEndDate: form.validityEndDate,
@@ -586,6 +651,10 @@ export default function IntangibleAssetManagement() {
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void handleShareAssets()}>
+          <Share2 className="mr-2 h-4 w-4" />
+          Share
+        </Button>
         {selectedAssetIds.length > 0 && (
           <>
             <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
@@ -731,6 +800,10 @@ export default function IntangibleAssetManagement() {
                               <DropdownMenuItem onClick={() => openEdit(asset)}>
                                 <Pencil className="mr-2 h-4 w-4" />
                                 Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleShareAssets(asset)}>
+                                <Share2 className="mr-2 h-4 w-4" />
+                                Share
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem

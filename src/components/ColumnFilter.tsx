@@ -58,7 +58,7 @@ export function ColumnFilter({ title, options, selected, onChange, sortDir, onSo
 
     return (
         <div className="relative inline-flex max-w-full items-start gap-1.5 align-top">
-            <span className="min-w-0 whitespace-normal break-normal text-[12px] font-semibold leading-snug">
+            <span className="min-w-0 whitespace-normal break-normal text-[12px] font-bold leading-snug">
                 {title}
             </span>
 

@@ -12,6 +12,8 @@ import { Asset } from '@/types';
 
 const CHART_COLORS = ['hsl(217, 91%, 50%)', 'hsl(142, 71%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
 type AssetListFilter = 'all' | 'company-owned' | 'vendor' | 'available' | 'assigned' | 'dead';
+type CurrencyCode = 'USD' | 'INR';
+const INTANGIBLE_AMOUNT_CURRENCY_STORAGE_KEY = 'src_23rasset_intangible_amount_currencies';
 const DEAD_STATUS_KEYS = new Set([
   'DEAD',
   'DAMAGED',
@@ -30,6 +32,86 @@ const BENIGN_CONDITIONS = new Set(['NEW', 'GOOD', 'EXCELLENT', 'FAIR', 'AVAILABL
 
 function normalizeStatus(value?: string) {
   return (value || '').trim().toUpperCase().replace(/\s+/g, '_');
+}
+
+function loadAmountCurrencies(): Record<string, CurrencyCode> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(INTANGIBLE_AMOUNT_CURRENCY_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.entries(parsed).reduce<Record<string, CurrencyCode>>((acc, [key, value]) => {
+      if (value === 'USD' || value === 'INR') acc[key] = value;
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+function buildAmountCurrencySignature(input: {
+  name?: string;
+  category?: string;
+  assignerLocation?: string;
+  subscriptionType?: string;
+  validityStartDate?: string;
+  validityEndDate?: string;
+  renewalDate?: string;
+  amountPaid?: string | number | null;
+}) {
+  return [
+    input.name || '',
+    input.category || '',
+    input.assignerLocation || '',
+    input.subscriptionType || '',
+    input.validityStartDate || '',
+    input.validityEndDate || '',
+    input.renewalDate || '',
+    input.amountPaid == null ? '' : String(input.amountPaid),
+  ].join('|');
+}
+
+function getAmountCurrency(asset: Asset): CurrencyCode {
+  if (asset.amountCurrency === 'USD' || asset.amountCurrency === 'INR') {
+    return asset.amountCurrency;
+  }
+
+  const amountCurrencies = loadAmountCurrencies();
+  const idKey = `id:${asset.id}`;
+  const signatureKey = `sig:${buildAmountCurrencySignature({
+    name: asset.name,
+    category: asset.category,
+    assignerLocation: asset.assignerLocation,
+    subscriptionType: asset.subscriptionType,
+    validityStartDate: asset.validityStartDate || asset.purchaseDate,
+    validityEndDate: asset.validityEndDate || asset.warrantyPeriod,
+    renewalDate: asset.renewalDate,
+    amountPaid: asset.amountPaid,
+  })}`;
+
+  return amountCurrencies[idKey] || amountCurrencies[signatureKey] || 'INR';
+}
+
+function formatIntangibleAmount(asset: Asset) {
+  if (asset.amountPaid == null) return '-';
+
+  const currency = getAmountCurrency(asset);
+  return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: Number.isInteger(asset.amountPaid) ? 0 : 2,
+  }).format(asset.amountPaid);
+}
+
+function isAvailableAsset(asset: Asset) {
+  if (asset.type === 'Intangible') {
+    return !isDeadAsset(asset);
+  }
+
+  const statusKey = normalizeStatus(asset.status);
+  return ['AVAILABLE', 'ACTIVE', 'IN_STOCK'].includes(statusKey) && !isDeadAsset(asset);
 }
 
 function isDeadAsset(asset: Asset) {
@@ -65,6 +147,14 @@ function getAssignerLabel(asset: Asset) {
   return asset.type === 'Tangible' ? asset.assignerName || '-' : asset.name || '-';
 }
 
+function getOwnershipLabel(asset: Asset) {
+  if (asset.type === 'Tangible' && (asset.vendorName || asset.vendor)) {
+    return 'Vendor Asset';
+  }
+
+  return asset.ownership || (asset.company ? 'Company-Owned' : 'Other');
+}
+
 function getAssetLocationLabel(asset: Asset) {
   return asset.location || asset.assignerLocation || asset.employeeLocation || '-';
 }
@@ -76,7 +166,6 @@ export default function Dashboard() {
   const [selectedCompanyAsset, setSelectedCompanyAsset] = useState<Asset | null>(null);
   const [companyAssetInfoOpen, setCompanyAssetInfoOpen] = useState(false);
   const [totalAssetsView, setTotalAssetsView] = useState<'Tangible' | 'Intangible'>('Tangible');
-  const [availableAssetsView, setAvailableAssetsView] = useState<'Tangible' | 'Intangible'>('Tangible');
 
   if (isLoading) {
     return (
@@ -91,23 +180,16 @@ export default function Dashboard() {
   const tangibleAssets = assets.filter((asset) => asset.type === 'Tangible');
   const intangibleAssets = assets.filter((asset) => asset.type === 'Intangible');
   const companyOwnedTangibleAssets = tangibleAssets.filter(
-    (asset) => asset.ownership === 'Company-Owned' || (!asset.vendor && !asset.vendorName),
+    (asset) => getOwnershipLabel(asset) === 'Company-Owned',
   );
-  const availableTangibleAssets = tangibleAssets.filter(
-    (asset) => normalizeStatus(asset.status) === 'AVAILABLE' && !isDeadAsset(asset),
-  );
-  const availableIntangibleAssets = intangibleAssets.filter(
-    (asset) => normalizeStatus(asset.status) === 'AVAILABLE' && !isDeadAsset(asset),
-  );
+  const availableTangibleAssets = tangibleAssets.filter(isAvailableAsset);
   const assignedTangibleAssets = tangibleAssets.filter(
     (asset) => (Boolean(asset.assignedTo) || normalizeStatus(asset.status) === 'ASSIGNED') && !isDeadAsset(asset),
   );
   const companyOwnedAssets = companyOwnedTangibleAssets.length;
-  const vendorAssets = assets.filter((asset) => asset.type === 'Tangible' && Boolean(asset.vendor)).length;
-  const availableAssets = assets.filter((asset) => normalizeStatus(asset.status) === 'AVAILABLE' && !isDeadAsset(asset)).length;
-  const assignedAssets = assets.filter(
-    (asset) => (Boolean(asset.assignedTo) || normalizeStatus(asset.status) === 'ASSIGNED') && !isDeadAsset(asset),
-  ).length;
+  const vendorAssets = assets.filter((asset) => asset.type === 'Tangible' && getOwnershipLabel(asset) === 'Vendor Asset').length;
+  const availableAssets = availableTangibleAssets.length;
+  const assignedAssets = assignedTangibleAssets.length;
   const deadAssets = assets.filter(isDeadAsset);
 
   const selectedCompanyAssetType = selectedCompanyAsset?.type === 'Intangible' ? 'Intangible' : 'Tangible';
@@ -134,7 +216,7 @@ export default function Dashboard() {
           ['License Key', selectedCompanyAsset.licenseKey],
         ]
       : [
-          ['Assigner Name', getAssignerLabel(selectedCompanyAsset)],
+          ['Name', getAssignerLabel(selectedCompanyAsset)],
           ['Category', selectedCompanyAsset.category],
           ['Asset Name', getAssetLabel(selectedCompanyAsset)],
           ['Asset Status', selectedCompanyAsset.status],
@@ -144,7 +226,7 @@ export default function Dashboard() {
           ['Role', selectedCompanyAsset.employeeRole],
           ['Employment Type', selectedCompanyAsset.employmentType],
           ['Emp Location', selectedCompanyAsset.employeeLocation],
-          ['Ownership', selectedCompanyAsset.company ? 'Company-Owned' : selectedCompanyAsset.vendor ? 'Vendor Asset' : '-'],
+          ['Ownership', getOwnershipLabel(selectedCompanyAsset)],
           ['Vendor Name', selectedCompanyAsset.vendorName || selectedCompanyAsset.vendor],
           ['Amount', selectedCompanyAsset.amount],
           ['Serial No.', selectedCompanyAsset.serialNumber],
@@ -196,9 +278,6 @@ export default function Dashboard() {
     if (filter === 'all') {
       setTotalAssetsView('Tangible');
     }
-    if (filter === 'available') {
-      setAvailableAssetsView('Tangible');
-    }
     if (filter !== 'company-owned') {
       setSelectedCompanyAsset(null);
       setCompanyAssetInfoOpen(false);
@@ -230,19 +309,17 @@ export default function Dashboard() {
     vendor: {
       title: 'Vendor Assets',
       description: 'Assets supplied or managed by vendors.',
-      assets: assets.filter((asset) => asset.type === 'Tangible' && Boolean(asset.vendor)),
+      assets: assets.filter((asset) => asset.type === 'Tangible' && getOwnershipLabel(asset) === 'Vendor Asset'),
     },
     available: {
       title: 'Available Assets',
-      description: 'Assets that are currently available for use.',
-      assets: assets.filter((asset) => normalizeStatus(asset.status) === 'AVAILABLE' && !isDeadAsset(asset)),
+      description: 'Tangible assets that are currently available for use.',
+      assets: availableTangibleAssets,
     },
     assigned: {
       title: 'Assigned Assets',
-      description: 'Assets that are currently assigned to users or marked as assigned.',
-      assets: assets.filter(
-        (asset) => (Boolean(asset.assignedTo) || normalizeStatus(asset.status) === 'ASSIGNED') && !isDeadAsset(asset),
-      ),
+      description: 'Tangible assets that are currently assigned to users or marked as assigned.',
+      assets: assignedTangibleAssets,
     },
     dead: {
       title: 'Dead Assets',
@@ -257,15 +334,13 @@ export default function Dashboard() {
         ? tangibleAssets
         : intangibleAssets
       : assetListFilter === 'available'
-        ? availableAssetsView === 'Tangible'
-          ? availableTangibleAssets
-          : availableIntangibleAssets
+        ? availableTangibleAssets
       : assetListFilter === 'assigned'
         ? assignedTangibleAssets
       : assetListMeta[assetListFilter].assets;
   const assetListTitle = assetListMeta[assetListFilter].title;
   const assetListDescription =
-    assetListFilter === 'all' || assetListFilter === 'available'
+    assetListFilter === 'all'
       ? 'Select Tangible or Intangible to inspect the related assets.'
       : assetListMeta[assetListFilter].description;
   const dialogSizeClass =
@@ -280,6 +355,11 @@ export default function Dashboard() {
       : assetListFilter === 'dead'
         ? 'flex h-[72vh] max-w-5xl flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white'
       : 'flex h-[72vh] max-w-2xl flex-col overflow-hidden border-0 p-0 shadow-2xl sm:rounded-xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white';
+  const totalAssetsHeadClass =
+    totalAssetsView === 'Intangible'
+      ? 'h-12 border-b-0 px-2 text-xs font-semibold leading-tight text-white'
+      : 'h-12 border-b-0 px-4 font-semibold text-white';
+  const totalAssetsCellClass = totalAssetsView === 'Intangible' ? 'px-2 py-4 text-sm' : '';
   return (
     <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col gap-6 overflow-y-auto pr-1 pb-6 scrollbar-hide">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -386,66 +466,52 @@ export default function Dashboard() {
           <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
             <DialogTitle className="text-xl font-semibold text-white">{assetListTitle}</DialogTitle>
             <DialogDescription className="text-sm text-white/80">{assetListDescription}</DialogDescription>
-            {assetListFilter === 'all' || assetListFilter === 'available' ? (
+            {assetListFilter === 'all' ? (
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    assetListFilter === 'available'
-                      ? setAvailableAssetsView('Tangible')
-                      : setTotalAssetsView('Tangible')
-                  }
+                  onClick={() => setTotalAssetsView('Tangible')}
                   className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                    (assetListFilter === 'available'
-                      ? availableAssetsView
-                      : totalAssetsView) === 'Tangible'
+                    totalAssetsView === 'Tangible'
                       ? 'border-white bg-white text-[#0b2a59] shadow-sm'
                       : 'border-white/30 bg-white/10 text-white hover:border-white/60 hover:bg-white/15'
                   }`}
                 >
                   <p className="text-sm font-semibold">Tangible</p>
-                  <p className="text-xs opacity-80">
-                    {assetListFilter === 'available'
-                      ? availableTangibleAssets.length
-                      : tangibleAssets.length} assets
-                  </p>
+                  <p className="text-xs opacity-80">{tangibleAssets.length} assets</p>
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    assetListFilter === 'available'
-                      ? setAvailableAssetsView('Intangible')
-                      : setTotalAssetsView('Intangible')
-                  }
+                  onClick={() => setTotalAssetsView('Intangible')}
                   className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                    (assetListFilter === 'available'
-                      ? availableAssetsView
-                      : totalAssetsView) === 'Intangible'
+                    totalAssetsView === 'Intangible'
                       ? 'border-white bg-white text-[#0b2a59] shadow-sm'
                       : 'border-white/30 bg-white/10 text-white hover:border-white/60 hover:bg-white/15'
                   }`}
                 >
                   <p className="text-sm font-semibold">Intangible</p>
-                  <p className="text-xs opacity-80">
-                    {assetListFilter === 'available'
-                      ? availableIntangibleAssets.length
-                      : intangibleAssets.length} assets
-                  </p>
+                  <p className="text-xs opacity-80">{intangibleAssets.length} assets</p>
                 </button>
               </div>
             ) : null}
           </DialogHeader>
           <ScrollArea type="always" className="min-h-0 flex-1 bg-slate-50 px-6 py-5">
             {assetListFilter === 'all' ? (
-              <Table className="table-fixed w-full overflow-hidden rounded-lg bg-white text-sm shadow-sm">
+              <div className="w-full max-w-full overflow-x-hidden">
+              <Table
+                className="table-fixed w-full overflow-hidden rounded-lg bg-white text-sm shadow-sm"
+              >
                 <colgroup>
                   {totalAssetsView === 'Intangible' ? (
                     <>
-                      <col className="w-[24%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[28%]" />
-                      <col className="w-[18%]" />
                       <col className="w-[12%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[15%]" />
                     </>
                   ) : (
                     <>
@@ -459,39 +525,58 @@ export default function Dashboard() {
                 </colgroup>
                 <TableHeader className="sticky top-0 z-20">
                   <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
-                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Name</TableHead>
-                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Category</TableHead>
-                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Location</TableHead>
+                    <TableHead className={totalAssetsHeadClass}>Name</TableHead>
+                    <TableHead className={totalAssetsHeadClass}>Category</TableHead>
+                    <TableHead className={totalAssetsHeadClass}>Location</TableHead>
                     {totalAssetsView === 'Intangible' ? (
-                      <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Subscription Type</TableHead>
+                      <>
+                        <TableHead className={totalAssetsHeadClass}>Subscription Type</TableHead>
+                        <TableHead className={totalAssetsHeadClass}>Start Date</TableHead>
+                        <TableHead className={totalAssetsHeadClass}>Expiry Date</TableHead>
+                        <TableHead className={totalAssetsHeadClass}>Renewal Date</TableHead>
+                        <TableHead className={totalAssetsHeadClass}>Amount (USD or INR)</TableHead>
+                      </>
                     ) : (
-                      <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
+                      <>
+                        <TableHead className={totalAssetsHeadClass}>Employee Name</TableHead>
+                        <TableHead className={totalAssetsHeadClass}>Status</TableHead>
+                      </>
                     )}
-                    <TableHead className="h-12 border-b-0 px-4 font-semibold text-white">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visibleAssets.map((asset) => (
                     <TableRow key={asset.id}>
-                      <TableCell className="px-4 py-4">
+                      <TableCell className={`${totalAssetsCellClass} ${totalAssetsView === 'Intangible' ? '' : 'px-4 py-4'}`}>
                         <div className="flex items-center gap-3">
                           <p className="truncate font-medium text-slate-900">{getAssignerLabel(asset)}</p>
                         </div>
                       </TableCell>
-                      <TableCell className="truncate">{asset.category || '-'}</TableCell>
-                      <TableCell className="truncate">{asset.employeeLocation || asset.assignerLocation || asset.location || '-'}</TableCell>
-                      {totalAssetsView === 'Intangible' ? (
-                        <TableCell className="truncate">{asset.subscriptionType || '-'}</TableCell>
-                      ) : (
-                        <TableCell className="truncate">{asset.employeeName || asset.assignedTo || '-'}</TableCell>
-                      )}
-                      <TableCell className="px-4 py-4">
-                        <StatusBadge status={asset.status} />
+                      <TableCell className={`${totalAssetsCellClass} truncate`}>{asset.category || '-'}</TableCell>
+                      <TableCell className={`${totalAssetsCellClass} truncate`}>
+                        {asset.employeeLocation || asset.assignerLocation || asset.location || '-'}
                       </TableCell>
+                      {totalAssetsView === 'Intangible' ? (
+                        <>
+                          <TableCell className={`${totalAssetsCellClass} truncate`}>{asset.subscriptionType || '-'}</TableCell>
+                          <TableCell className={`${totalAssetsCellClass} truncate`}>{asset.validityStartDate || asset.purchaseDate || '-'}</TableCell>
+                          <TableCell className={`${totalAssetsCellClass} truncate`}>{asset.validityEndDate || asset.warrantyPeriod || '-'}</TableCell>
+                          <TableCell className={`${totalAssetsCellClass} truncate`}>{asset.renewalDate || '-'}</TableCell>
+                          <TableCell className={`${totalAssetsCellClass} truncate`}>{formatIntangibleAmount(asset)}</TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell className="truncate">{asset.employeeName || asset.assignedTo || '-'}</TableCell>
+                          <TableCell className="px-4 py-4">
+                            <StatusBadge status={asset.status} />
+                          </TableCell>
+                        </>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </div>
             ) : assetListFilter === 'available' ? (
               <Table className="table-fixed w-full">
                 <colgroup>
@@ -504,9 +589,7 @@ export default function Dashboard() {
                   <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Name</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Category</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">
-                      {availableAssetsView === 'Intangible' ? 'Subscription Type' : 'Asset Name'}
-                    </TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -519,9 +602,7 @@ export default function Dashboard() {
                         </div>
                       </TableCell>
                       <TableCell className="truncate">{asset.category || '-'}</TableCell>
-                      <TableCell className="truncate">
-                        {availableAssetsView === 'Intangible' ? asset.subscriptionType || '-' : getAssetLabel(asset)}
-                      </TableCell>
+                      <TableCell className="truncate">{getAssetLabel(asset)}</TableCell>
                       <TableCell>
                         <StatusBadge status={asset.status} />
                       </TableCell>
@@ -540,7 +621,7 @@ export default function Dashboard() {
                 <TableHeader className="sticky top-0 z-20">
                   <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Assigner Name</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Name</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Employee Name</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">More Info</TableHead>
                   </TableRow>
@@ -625,7 +706,7 @@ export default function Dashboard() {
                   <TableRow className="border-b-0 bg-[#0b2a59] hover:bg-[#0b2a59]">
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Serial No</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Asset Name</TableHead>
-                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Assigner Name</TableHead>
+                    <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Name</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Location</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Status</TableHead>
                     <TableHead className="h-14 border-b-0 px-4 font-semibold text-white">Reason</TableHead>
@@ -679,7 +760,7 @@ export default function Dashboard() {
                     </TableCell>
                     <TableCell>{asset.type}</TableCell>
                     <TableCell className="truncate">
-                      {asset.vendor ? 'Vendor Asset' : asset.company ? 'Company-Owned' : 'Other'}
+                      {getOwnershipLabel(asset)}
                     </TableCell>
                     <TableCell><StatusBadge status={asset.status} /></TableCell>
                     <TableCell className="truncate">{asset.assignedTo || '-'}</TableCell>

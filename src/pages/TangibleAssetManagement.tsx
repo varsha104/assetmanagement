@@ -28,15 +28,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToastAction } from '@/components/ui/toast';
 import { StatusBadge } from '@/components/StatusBadges';
-import { CircleEllipsis, Download, Loader2, Mail, MessageCircle, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
+import { CircleEllipsis, Download, History, ImagePlus, Loader2, Mail, MessageCircle, MoreVertical, Pencil, Plus, RefreshCw, Search, Share2, Trash2, Wrench, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { mailApi } from '@/services/api';
-import { exportCsv, type CsvColumn } from '@/lib/exportCsv';
+import { createTableImageFile, exportCsv, type CsvColumn } from '@/lib/exportCsv';
 import { Asset } from '@/types';
 
 const TANGIBLE_CATEGORIES = ['Laptop', 'Desktop', 'Mouse', 'Headset'] as const;
 const ASSIGNER_LOCATIONS = ['Banglore', 'Hyderabad', 'Vijayawada'] as const;
 const DEFAULT_WHATSAPP_COUNTRY_CODE = '91';
+const REPAIR_HISTORY_STORAGE_KEY = 'src_23rasset_tangible_repair_history';
 type CurrencyCode = 'USD' | 'INR';
 type TangibleFilterKey =
   | 'assignerName'
@@ -138,6 +139,35 @@ function parseCurrencyAmount(value: string, currency: CurrencyCode) {
   return Number.isFinite(normalized) ? normalized : null;
 }
 
+function getTodayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function loadRepairHistory(): RepairHistoryEntry[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(REPAIR_HISTORY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) as RepairHistoryEntry[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistRepairHistory(entries: RepairHistoryEntry[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(REPAIR_HISTORY_STORAGE_KEY, JSON.stringify(entries));
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Unable to read selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function normalizeTangibleCategory(value?: string) {
   return TANGIBLE_CATEGORIES.includes(value as (typeof TANGIBLE_CATEGORIES)[number]) ? value || 'Laptop' : 'Other';
 }
@@ -210,6 +240,15 @@ type DeleteConfirmState =
   | { type: 'bulk' }
   | null;
 
+type RepairHistoryEntry = {
+  id: string;
+  assetId: string;
+  repairDate: string;
+  repairReason: string;
+  repairImageName?: string;
+  repairImageDataUrl?: string;
+};
+
 const emptyForm = (): TangibleFormState => ({
   name: '',
   assetName: '',
@@ -243,9 +282,14 @@ export default function TangibleAssetManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [actionMode, setActionMode] = useState<'repair' | 'replacement' | null>(null);
+  const [actionDate, setActionDate] = useState('');
   const [actionReason, setActionReason] = useState('');
+  const [actionImageFile, setActionImageFile] = useState<File | null>(null);
   const [actionAsset, setActionAsset] = useState<Asset | null>(null);
+  const [repairDetailsAsset, setRepairDetailsAsset] = useState<Asset | null>(null);
+  const [repairHistory, setRepairHistory] = useState<RepairHistoryEntry[]>(() => loadRepairHistory());
   const [employeeInfoAsset, setEmployeeInfoAsset] = useState<Asset | null>(null);
   const [emailTemplateOpen, setEmailTemplateOpen] = useState(false);
   const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
@@ -324,6 +368,19 @@ export default function TangibleAssetManagement() {
     return matchesSearch && matchesStatus && matchesColumnFilters;
   });
   const totalAssetsCount = tangibleAssets.length;
+  const repairHistoryRows = repairHistory
+    .map((entry) => ({
+      entry,
+      asset: tangibleAssets.find((asset) => asset.id === entry.assetId),
+    }))
+    .filter((row) => Boolean(row.asset));
+  const repairDetailsEntry = repairDetailsAsset
+    ? repairHistory.find((entry) => entry.assetId === repairDetailsAsset.id)
+    : null;
+  const isRepairStatus = (status?: string) => {
+    const statusKey = (status || '').toUpperCase();
+    return statusKey === 'REPAIR' || statusKey === 'UNDER REPAIR';
+  };
   const filteredAssetIds = filteredAssets.map((asset) => asset.id);
   const selectedVisibleAssetIds = selectedAssetIds.filter((id) => filteredAssetIds.includes(id));
   const allVisibleSelected = filteredAssetIds.length > 0 && selectedVisibleAssetIds.length === filteredAssetIds.length;
@@ -351,20 +408,84 @@ export default function TangibleAssetManagement() {
   };
 
   const handleExport = () => {
-    if (filteredAssets.length === 0) {
+    const selectedAssets = selectedAssetIds.length > 0
+      ? tangibleAssets.filter((asset) => selectedAssetIds.includes(asset.id))
+      : [];
+    const assetsToExport = selectedAssets.length > 0 ? selectedAssets : filteredAssets;
+    const exportScope = selectedAssets.length > 0 ? 'selected' : 'filtered';
+
+    if (assetsToExport.length === 0) {
       toast({
         title: 'Nothing to export',
-        description: 'No tangible assets match the current filters.',
+        description: selectedAssetIds.length > 0 ? 'Selected tangible assets could not be found.' : 'No tangible assets match the current filters.',
         variant: 'destructive',
       });
       return;
     }
 
-    exportCsv('tangible-assets.csv', filteredAssets, TANGIBLE_EXPORT_COLUMNS);
+    exportCsv('tangible-assets.csv', assetsToExport, TANGIBLE_EXPORT_COLUMNS);
     toast({
       title: 'Tangible assets exported',
-      description: `${filteredAssets.length} filtered asset${filteredAssets.length === 1 ? '' : 's'} downloaded.`,
+      description: `${assetsToExport.length} ${exportScope} asset${assetsToExport.length === 1 ? '' : 's'} downloaded.`,
     });
+  };
+
+  const handleShareAssets = async (asset?: Asset) => {
+    const selectedAssets = selectedAssetIds.length > 0
+      ? tangibleAssets.filter((item) => selectedAssetIds.includes(item.id))
+      : [];
+    const assetsToShare = asset ? [asset] : selectedAssets.length > 0 ? selectedAssets : filteredAssets;
+
+    if (assetsToShare.length === 0) {
+      toast({
+        title: 'Nothing to share',
+        description: selectedAssetIds.length > 0 ? 'Selected tangible assets could not be found.' : 'No tangible assets match the current filters.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const title = assetsToShare.length === 1 ? getAssetDisplayName(assetsToShare[0]) : 'Tangible assets';
+    const file = await createTableImageFile('tangible-assets.png', title, assetsToShare, TANGIBLE_EXPORT_COLUMNS);
+    const shareData: ShareData = {
+      title,
+      text: `${assetsToShare.length} tangible asset${assetsToShare.length === 1 ? '' : 's'} attached as an image.`,
+      files: [file],
+    };
+
+    try {
+      if (typeof navigator === 'undefined' || !navigator.share) {
+        toast({
+          title: 'Sharing is not supported',
+          description: 'This browser cannot share image attachments directly.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (navigator.canShare && !navigator.canShare(shareData)) {
+        toast({
+          title: 'Image sharing is not supported',
+          description: 'This browser cannot share this image attachment directly.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      await navigator.share(shareData);
+      toast({
+        title: 'Tangible assets shared',
+        description: `${assetsToShare.length} asset${assetsToShare.length === 1 ? '' : 's'} sent as an image.`,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+
+      toast({
+        title: 'Share failed',
+        description: error instanceof Error ? error.message : 'Unable to share tangible assets as an image.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const openEdit = (asset: Asset) => {
@@ -630,15 +751,37 @@ Asset Management Team`;
   const openActionDialog = (asset: Asset, mode: 'repair' | 'replacement') => {
     setActionAsset(asset);
     setActionMode(mode);
+    setActionDate(getTodayDateInputValue());
     setActionReason('');
+    setActionImageFile(null);
     setActionDialogOpen(true);
   };
 
   const closeActionDialog = () => {
     setActionDialogOpen(false);
     setActionMode(null);
+    setActionDate('');
     setActionReason('');
+    setActionImageFile(null);
     setActionAsset(null);
+  };
+
+  const handleActionImageChange = (file: File | undefined) => {
+    if (!file) {
+      setActionImageFile(null);
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid image',
+        description: 'Please select an image file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setActionImageFile(file);
   };
 
   const closeEmployeeInfoDialog = () => {
@@ -721,6 +864,19 @@ Asset Management Team`;
 
     try {
       const nextStatus = actionMode === 'repair' ? 'Repair' : 'Replacement';
+      const repairImageDataUrl = actionMode === 'repair' && actionImageFile ? await readFileAsDataUrl(actionImageFile) : undefined;
+      const historyEntry: RepairHistoryEntry | null =
+        actionMode === 'repair'
+          ? {
+              id: `${actionAsset.id}-${Date.now()}`,
+              assetId: actionAsset.id,
+              repairDate: actionDate,
+              repairReason: trimmedReason,
+              repairImageName: actionImageFile?.name,
+              repairImageDataUrl,
+            }
+          : null;
+
       await updateAsset(actionAsset.id, {
         status: nextStatus,
         condition: trimmedReason,
@@ -731,10 +887,21 @@ Asset Management Team`;
         raisedBy: user?.id || 'higher_management',
         description:
           actionMode === 'repair'
-            ? `Repair requested for ${actionAsset.name}: ${trimmedReason}`
-            : `Replacement requested for ${actionAsset.name}: ${trimmedReason}`,
+            ? `Repair requested for ${actionAsset.name} on ${actionDate}: ${trimmedReason}`
+            : `Replacement requested for ${actionAsset.name} on ${actionDate}: ${trimmedReason}`,
+        repairDate: actionDate,
+        repairImageName: actionMode === 'repair' ? actionImageFile?.name : undefined,
+        repairImageDataUrl,
         priority: 'High',
       });
+
+      if (historyEntry) {
+        setRepairHistory((prev) => {
+          const next = [historyEntry, ...prev];
+          persistRepairHistory(next);
+          return next;
+        });
+      }
 
       toast({
         title: actionMode === 'repair' ? 'Repair request raised' : 'Replacement request raised',
@@ -779,7 +946,7 @@ Asset Management Team`;
             className="h-11 pl-10"
           />
         </div>
-        <div className="flex w-full gap-2 md:w-auto">
+        <div className="flex w-full items-start gap-2 md:w-auto">
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'Available' | 'Assigned')}>
             <SelectTrigger className="h-11 w-full md:w-48">
               <SelectValue placeholder="Filter status" />
@@ -790,10 +957,16 @@ Asset Management Team`;
               <SelectItem value="Assigned">Assigned</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={openAdd} className="h-11 w-full md:w-auto">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Tangible Asset
-          </Button>
+          <div className="flex w-full flex-col gap-2 md:w-auto">
+            <Button onClick={openAdd} className="h-11 w-full md:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Tangible Asset
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setHistoryDialogOpen(true)} className="h-10 w-full md:w-auto">
+              <History className="mr-2 h-4 w-4" />
+              History
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -804,6 +977,10 @@ Asset Management Team`;
         <Button type="button" variant="outline" size="sm" onClick={handleExport}>
           <Download className="mr-2 h-4 w-4" />
           Export
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => void handleShareAssets()}>
+          <Share2 className="mr-2 h-4 w-4" />
+          Share
         </Button>
         {selectedAssetIds.length > 0 && (
           <Button
@@ -977,7 +1154,18 @@ Asset Management Team`;
                     <td className="px-4 py-4">{asset.category || '-'}</td>
                     <td className="px-4 py-4">{asset.assetName || '—'}</td>
                     <td className="px-4 py-4">
-                      <StatusBadge status={asset.status} />
+                      {isRepairStatus(asset.status) ? (
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer border-0 bg-transparent p-0"
+                          onClick={() => setRepairDetailsAsset(asset)}
+                          aria-label={`View repair details for ${asset.assetName || asset.name || 'asset'}`}
+                        >
+                          <StatusBadge status={asset.status} />
+                        </button>
+                      ) : (
+                        <StatusBadge status={asset.status} />
+                      )}
                     </td>
                     <td className="px-4 py-4">{asset.assignerLocation || '—'}</td>
                     <td className="px-4 py-4">
@@ -1026,6 +1214,10 @@ Asset Management Team`;
                             <DropdownMenuItem onClick={() => openActionDialog(asset, 'replacement')}>
                               <RefreshCw className="mr-2 h-4 w-4" />
                               Replacement
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => void handleShareAssets(asset)}>
+                              <Share2 className="mr-2 h-4 w-4" />
+                              Share
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -1487,6 +1679,16 @@ Asset Management Team`;
           </DialogHeader>
 
           <div className="space-y-2 px-6 py-5">
+            <div className="space-y-2">
+              <Label htmlFor="asset-action-date">Date</Label>
+              <Input
+                id="asset-action-date"
+                type="date"
+                value={actionDate}
+                readOnly
+                className="bg-slate-50"
+              />
+            </div>
             <Label htmlFor="asset-action-reason">Reason</Label>
             <Textarea
               id="asset-action-reason"
@@ -1495,6 +1697,44 @@ Asset Management Team`;
               rows={4}
               placeholder="Enter the reason"
             />
+            {actionMode === 'repair' ? (
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="asset-action-image">Upload Image</Label>
+                <label
+                  htmlFor="asset-action-image"
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 transition-colors hover:border-[#0b2a59] hover:bg-blue-50"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <ImagePlus className="h-4 w-4 shrink-0 text-[#0b2a59]" />
+                    <span className="truncate">{actionImageFile ? actionImageFile.name : 'Choose image from device'}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-[#0b2a59]">Browse</span>
+                </label>
+                <Input
+                  key={actionImageFile?.name || 'empty-repair-image'}
+                  id="asset-action-image"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => handleActionImageChange(event.target.files?.[0])}
+                />
+                {actionImageFile ? (
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                    <span className="min-w-0 truncate text-slate-700">{actionImageFile.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => setActionImageFile(null)}
+                      aria-label="Remove selected image"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter className="border-t bg-slate-50 px-6 py-4">
@@ -1503,6 +1743,131 @@ Asset Management Team`;
             </Button>
             <Button className="bg-[#0b2a59] text-white hover:bg-[#12386f]" onClick={() => void submitAssetAction()}>
               {actionMode === 'repair' ? 'Submit Repair' : 'Submit Replacement'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden border-0 p-0 sm:max-w-6xl [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">Repair History</DialogTitle>
+            <DialogDescription className="text-sm text-white/80">
+              View repair issue details submitted from the repair popup.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+            <div className="overflow-hidden rounded-xl border bg-white">
+              <div className="overflow-x-auto">
+                <table className="min-w-[1120px] w-full text-sm">
+                  <thead className="bg-[#0b2a59] text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Serial Number</th>
+                      <th className="px-4 py-3 text-left font-semibold">Name</th>
+                      <th className="px-4 py-3 text-left font-semibold">Asset Name</th>
+                      <th className="px-4 py-3 text-left font-semibold">Date of Repair Issue</th>
+                      <th className="px-4 py-3 text-left font-semibold">Repair Reason</th>
+                      <th className="px-4 py-3 text-left font-semibold">Uploaded Repair Image</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repairHistoryRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                          No repair history found.
+                        </td>
+                      </tr>
+                    ) : (
+                      repairHistoryRows.map(({ entry, asset }) => (
+                        <tr key={entry.id} className="border-t">
+                          <td className="px-4 py-4">{asset?.serialNumber || '—'}</td>
+                          <td className="px-4 py-4 font-medium text-slate-900">{asset?.assignerName || asset?.name || '—'}</td>
+                          <td className="px-4 py-4">{asset?.assetName || asset?.name || '—'}</td>
+                          <td className="px-4 py-4">{entry.repairDate || '—'}</td>
+                          <td className="px-4 py-4">
+                            <p className="max-w-md whitespace-pre-wrap text-slate-700">{entry.repairReason || '—'}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            {entry.repairImageDataUrl ? (
+                              <a href={entry.repairImageDataUrl} target="_blank" rel="noreferrer" className="inline-block">
+                                <img
+                                  src={entry.repairImageDataUrl}
+                                  alt={entry.repairImageName || 'Repair issue'}
+                                  className="h-20 w-28 rounded-md border object-cover"
+                                />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t bg-slate-50 px-6 py-4">
+            <Button variant="outline" onClick={() => setHistoryDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(repairDetailsAsset)} onOpenChange={(open) => !open && setRepairDetailsAsset(null)}>
+        <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-lg [&>button]:right-5 [&>button]:top-5 [&>button_svg]:text-white">
+          <DialogHeader className="bg-[#0b2a59] px-6 py-5 text-left">
+            <DialogTitle className="text-xl text-white">Repair Details</DialogTitle>
+            <DialogDescription className="space-y-1 text-sm text-white/80">
+              <span className="block font-medium text-white">
+                Asset: {repairDetailsAsset?.assetName || repairDetailsAsset?.name || 'Selected asset'}
+              </span>
+              <span className="block">Serial Number: {repairDetailsAsset?.serialNumber || '—'}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 px-6 py-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase text-slate-500">Repair Date</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{repairDetailsEntry?.repairDate || '—'}</p>
+              </div>
+              <div className="rounded-md border bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase text-slate-500">Status</p>
+                <div className="mt-1">{repairDetailsAsset ? <StatusBadge status={repairDetailsAsset.status} /> : '—'}</div>
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-white px-3 py-2">
+              <p className="text-xs font-semibold uppercase text-slate-500">Repair Reason</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{repairDetailsEntry?.repairReason || '—'}</p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase text-slate-500">Uploaded Repair Image</p>
+              {repairDetailsEntry?.repairImageDataUrl ? (
+                <a href={repairDetailsEntry.repairImageDataUrl} target="_blank" rel="noreferrer" className="block">
+                  <img
+                    src={repairDetailsEntry.repairImageDataUrl}
+                    alt={repairDetailsEntry.repairImageName || 'Repair issue'}
+                    className="max-h-72 w-full rounded-md border object-contain"
+                  />
+                </a>
+              ) : (
+                <div className="rounded-md border border-dashed bg-slate-50 px-4 py-8 text-center text-sm text-muted-foreground">
+                  No repair image uploaded.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="border-t bg-slate-50 px-6 py-4">
+            <Button variant="outline" onClick={() => setRepairDetailsAsset(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

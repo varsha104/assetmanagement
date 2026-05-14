@@ -939,6 +939,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       serial_number: '',
       user_id: parseInt(issue.raisedBy),
       product_id: parseInt(issue.assetId),
+      repair_date: issue.repairDate,
+      repair_image_name: issue.repairImageName,
+      repair_image_data_url: issue.repairImageDataUrl,
     });
     if (!result.ok) {
       throw new Error(result.error || 'Failed to add repair issue');

@@ -76,6 +76,9 @@ export interface Issue {
   assetId: string;
   raisedBy: string;
   description: string;
+  repairDate?: string;
+  repairImageName?: string;
+  repairImageDataUrl?: string;
   priority: IssuePriority;
   status: IssueStatus;
   createdAt: string;

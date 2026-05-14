@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,7 @@ import { useData } from '@/contexts/DataContext';
 import { Loader2, Mail, MessageCircle, MoreVertical, Pencil, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { mailApi } from '@/services/api';
+import { ColumnFilter } from '@/components/ColumnFilter';
 
 const EMPLOYEE_LOCATIONS = ['Hyderabad', 'Banglore', 'Vijayawada'] as const;
 const WHATSAPP_NUMBER_DIGIT_LIMIT = 10;
@@ -64,6 +65,61 @@ export default function EmployeeManagement() {
   const [employeeMailSubject, setEmployeeMailSubject] = useState('');
   const [employeeMailBody, setEmployeeMailBody] = useState('');
   const [employeeMailSending, setEmployeeMailSending] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<string[]>([]);
+  const [roleFilter, setRoleFilter] = useState<string[]>([]);
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState<string[]>([]);
+
+  const sortedEmployeeRows = useMemo(() => {
+    const totalEmployees = employees.length;
+
+    return employees
+      .map((employee, index) => {
+        const id = String(employee.id || '');
+        const localTimestamp = id.startsWith('local-') ? Number(id.replace('local-', '')) : Number.NaN;
+        const numericId = Number(id);
+        const orderValue = Number.isFinite(localTimestamp)
+          ? localTimestamp
+          : Number.isFinite(numericId)
+            ? numericId
+            : totalEmployees - index;
+
+        return { employee, orderValue, index };
+      })
+      .sort((a, b) => b.orderValue - a.orderValue || a.index - b.index)
+      .map(({ employee }) => employee);
+  }, [employees]);
+
+  const roleOptions = useMemo(
+    () =>
+      Array.from(new Set(sortedEmployeeRows.map((employee) => employee.role?.trim()).filter(Boolean) as string[])).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [sortedEmployeeRows],
+  );
+
+  const locationOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...EMPLOYEE_LOCATIONS,
+          ...sortedEmployeeRows.map((employee) => employee.location?.trim()).filter(Boolean),
+        ] as string[]),
+      ).sort((a, b) => a.localeCompare(b)),
+    [sortedEmployeeRows],
+  );
+
+  const employeeRows = useMemo(
+    () =>
+      sortedEmployeeRows.filter((employee) => {
+        if (locationFilter.length > 0 && !locationFilter.includes(employee.location?.trim() || '')) return false;
+        if (roleFilter.length > 0 && !roleFilter.includes(employee.role?.trim() || '')) return false;
+        if (employmentTypeFilter.length > 0 && !employmentTypeFilter.includes(employee.employmentType?.trim() || '')) return false;
+        return true;
+      }),
+    [employmentTypeFilter, locationFilter, roleFilter, sortedEmployeeRows],
+  );
+
+  const hasActiveFilters = locationFilter.length > 0 || roleFilter.length > 0 || employmentTypeFilter.length > 0;
 
   if (isLoading) {
     return (
@@ -73,8 +129,6 @@ export default function EmployeeManagement() {
       </div>
     );
   }
-
-  const employeeRows = employees;
 
   const openEmployeeDialog = () => {
     setEditingEmployeeId(null);
@@ -225,8 +279,8 @@ export default function EmployeeManagement() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col gap-6 overflow-y-auto pr-1 pb-6 scrollbar-hide">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col gap-6 overflow-hidden pr-1 pb-6">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Employee Management</h1>
           <p className="text-sm text-muted-foreground">
@@ -240,37 +294,49 @@ export default function EmployeeManagement() {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b bg-[#0b2a59] px-6 py-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="shrink-0 border-b bg-[#0b2a59] px-6 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-white">Employee Details</h2>
               <p className="text-sm text-white/80">Employees saved here are available across asset assignment forms.</p>
             </div>
             <div className="rounded-full bg-white/15 px-3 py-1 text-sm font-semibold text-white">
-              {employeeRows.length} employees
+              {employeeRows.length}
+              {hasActiveFilters ? ` of ${sortedEmployeeRows.length}` : ''} employees
             </div>
           </div>
         </div>
-        <div className="max-h-[calc(100vh-18rem)] overflow-auto">
-          <Table className="text-sm">
+        <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+          <table className="w-full min-w-[1180px] caption-bottom text-sm">
             <TableHeader>
               <TableRow>
-                <TableHead className="font-bold">Emp Name</TableHead>
-                <TableHead className="font-bold">Role</TableHead>
-                <TableHead className="font-bold">Emp Mail</TableHead>
-                <TableHead className="font-bold">WhatsApp No</TableHead>
-                <TableHead className="font-bold">Alternate No</TableHead>
-                <TableHead className="font-bold">Employment Type</TableHead>
-                <TableHead className="font-bold">Location</TableHead>
-                <TableHead className="font-bold text-right">Action</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">Emp Name</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">
+                  <ColumnFilter title="Role" options={roleOptions} selected={roleFilter} onChange={setRoleFilter} />
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">Emp Mail</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">WhatsApp No</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">Alternate No</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">
+                  <ColumnFilter
+                    title="Employment Type"
+                    options={['Permanent', 'Contract']}
+                    selected={employmentTypeFilter}
+                    onChange={setEmploymentTypeFilter}
+                  />
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">
+                  <ColumnFilter title="Location" options={locationOptions} selected={locationFilter} onChange={setLocationFilter} />
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-white text-right font-bold text-black shadow-[inset_0_-1px_0_#e2e8f0]">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {employeeRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                    No employees added yet.
+                    {hasActiveFilters ? 'No employees match the selected filters.' : 'No employees added yet.'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -326,7 +392,7 @@ export default function EmployeeManagement() {
                 ))
               )}
             </TableBody>
-          </Table>
+          </table>
         </div>
       </div>
 
