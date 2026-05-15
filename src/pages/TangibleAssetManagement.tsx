@@ -473,10 +473,6 @@ export default function TangibleAssetManagement() {
       }
 
       await navigator.share(shareData);
-      toast({
-        title: 'Tangible assets shared',
-        description: `${assetsToShare.length} asset${assetsToShare.length === 1 ? '' : 's'} sent as an image.`,
-      });
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
 
@@ -885,11 +881,15 @@ Asset Management Team`;
       await addIssue({
         assetId: actionAsset.id,
         raisedBy: user?.id || 'higher_management',
+        serialNumber: actionAsset.serialNumber || '',
+        name: actionAsset.assignerName || actionAsset.name || '',
+        assetName: actionAsset.assetName || actionAsset.name || '',
         description:
           actionMode === 'repair'
             ? `Repair requested for ${actionAsset.name} on ${actionDate}: ${trimmedReason}`
             : `Replacement requested for ${actionAsset.name} on ${actionDate}: ${trimmedReason}`,
         repairDate: actionDate,
+        repairReason: trimmedReason,
         repairImageName: actionMode === 'repair' ? actionImageFile?.name : undefined,
         repairImageDataUrl,
         priority: 'High',
@@ -936,19 +936,19 @@ Asset Management Team`;
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="relative w-full md:w-100">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by assigner name, asset name, serial number, vendor, or location"
-            className="h-11 pl-10"
-          />
-        </div>
-        <div className="flex w-full items-start gap-2 md:w-auto">
+      <div className="space-y-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(360px,1fr)_220px_220px_140px] xl:items-center">
+          <div className="relative min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by assigner name, asset name, serial number, vendor, or location"
+              className="h-11 pl-10"
+            />
+          </div>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'Available' | 'Assigned')}>
-            <SelectTrigger className="h-11 w-full md:w-48">
+            <SelectTrigger className="h-11 w-full">
               <SelectValue placeholder="Filter status" />
             </SelectTrigger>
             <SelectContent>
@@ -957,46 +957,58 @@ Asset Management Team`;
               <SelectItem value="Assigned">Assigned</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex w-full flex-col gap-2 md:w-auto">
-            <Button onClick={openAdd} className="h-11 w-full md:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Tangible Asset
+          <Button onClick={openAdd} className="h-11 w-full whitespace-nowrap px-5">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Tangible Asset
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setHistoryDialogOpen(true)}
+            className="h-11 w-full whitespace-nowrap px-5"
+          >
+            <History className="mr-2 h-4 w-4" />
+            History
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="inline-flex h-9 w-fit items-center rounded-md border bg-slate-50 px-3 text-sm font-medium text-slate-700">
+            Total: {totalAssetsCount}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={handleExport} className="h-9 min-w-[6rem]">
+              <Download className="mr-2 h-4 w-4" />
+              Export
             </Button>
-            <Button type="button" variant="outline" onClick={() => setHistoryDialogOpen(true)} className="h-10 w-full md:w-auto">
-              <History className="mr-2 h-4 w-4" />
-              History
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleShareAssets()}
+              className="h-9 min-w-[6rem]"
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
             </Button>
+            {selectedAssetIds.length > 0 && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteConfirm({ type: 'bulk' })}
+                disabled={submitting}
+                className="h-9"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Selected ({selectedAssetIds.length})
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className="rounded-md border bg-slate-50 px-3 py-1 font-medium text-slate-700">
-          Total: {totalAssetsCount}
-        </span>
-        <Button type="button" variant="outline" size="sm" onClick={handleExport}>
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => void handleShareAssets()}>
-          <Share2 className="mr-2 h-4 w-4" />
-          Share
-        </Button>
-        {selectedAssetIds.length > 0 && (
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => setDeleteConfirm({ type: 'bulk' })}
-            disabled={submitting}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete Selected ({selectedAssetIds.length})
-          </Button>
-        )}
-      </div>
-
-      <div className="overflow-hidden rounded-xl border bg-white">
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-auto scrollbar-thin">
           <table className="min-w-[1740px] w-full table-fixed text-sm">
             <colgroup>
@@ -1125,7 +1137,7 @@ Asset Management Team`;
                     dark
                   />
                 </th>
-                <th className="bg-[#0b2a59] px-4 py-3 text-left font-semibold whitespace-nowrap">Actions</th>
+                <th className="bg-[#0b2a59] px-4 py-3 text-center font-semibold whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1189,7 +1201,7 @@ Asset Management Team`;
                     <td className="px-4 py-4">{asset.laptopModelNumber || '—'}</td>
                     <td className="px-4 py-4">{asset.laptopSpecifications || '—'}</td>
                     <td className="px-4 py-4">
-                      <div className="flex items-right justify-left">
+                      <div className="flex items-center justify-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button

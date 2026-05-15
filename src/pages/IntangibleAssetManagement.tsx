@@ -355,10 +355,6 @@ export default function IntangibleAssetManagement() {
       }
 
       await navigator.share(shareData);
-      toast({
-        title: 'Intangible assets shared',
-        description: `${assetsToShare.length} asset${assetsToShare.length === 1 ? '' : 's'} sent as an image.`,
-      });
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
 

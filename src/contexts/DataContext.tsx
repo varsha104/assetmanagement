@@ -936,10 +936,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addIssue = useCallback(async (issue: Omit<Issue, 'id' | 'createdAt' | 'status'>) => {
     const result = await repairApi.addIssue({
       issue_description: issue.description,
-      serial_number: '',
+      serial_number: issue.serialNumber || '',
+      name: issue.name || '',
+      asset_name: issue.assetName || '',
       user_id: parseInt(issue.raisedBy),
       product_id: parseInt(issue.assetId),
       repair_date: issue.repairDate,
+      repair_reason: issue.repairReason || issue.description,
       repair_image_name: issue.repairImageName,
       repair_image_data_url: issue.repairImageDataUrl,
     });

@@ -75,8 +75,12 @@ export interface Issue {
   id: string;
   assetId: string;
   raisedBy: string;
+  serialNumber?: string;
+  name?: string;
+  assetName?: string;
   description: string;
   repairDate?: string;
+  repairReason?: string;
   repairImageName?: string;
   repairImageDataUrl?: string;
   priority: IssuePriority;
